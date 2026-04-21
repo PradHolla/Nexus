@@ -1,6 +1,6 @@
-# Scholera AI
+# Nexus
 
-Scholera AI is a full-stack, local-first retrieval-augmented generation application designed to synthesize high-difficulty, graduate-level academic assessments from raw course materials. It transforms unstructured PDFs and presentation slides into strictly validated JSON quiz structures.
+Nexus is a full-stack, local-first retrieval-augmented generation application designed to synthesize high-difficulty, graduate-level academic assessments from raw course materials. It transforms unstructured PDFs and presentation slides into strictly validated JSON quiz structures.
 
 The system abandons standard single-pass LLM wrappers in favor of a dual-concurrency ingestion engine and a multi-agent orchestration loop. This architecture ensures strict factual grounding, minimizes hallucinations, and provides tenant-isolated semantic search.
 
