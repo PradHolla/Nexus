@@ -21,11 +21,11 @@ job_status = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting Scholera AI Backend...")
+    print("Starting Nexus Backend...")
     yield
     print("Shutting down...")
 
-app = FastAPI(title="Scholera AI API", lifespan=lifespan)
+app = FastAPI(title="Nexus API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

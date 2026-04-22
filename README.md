@@ -7,7 +7,7 @@ The system abandons standard single-pass LLM wrappers in favor of a dual-concurr
 ## Architecture Highlights
 
 ### 1. Dual-Concurrency Ingestion Pipeline
-Processing dozens of academic PDFs and slide decks sequentially is a severe bottleneck. Scholera solves this by implementing a dual-concurrency architecture.
+Processing dozens of academic PDFs and slide decks sequentially is a severe bottleneck. Nexus solves this by implementing a dual-concurrency architecture.
 * **CPU-Bound Processing:** A ProcessPoolExecutor distributes document parsing across multiple CPU cores, converting raw PDFs into clean Markdown simultaneously.
 * **I/O-Bound Processing:** A ThreadPoolExecutor handles network calls, concurrently routing sparse diagrams to a Vision LLM for text extraction and batching academic chunks to AWS Bedrock for Titan embeddings.
 

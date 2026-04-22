@@ -2,12 +2,23 @@ import os
 import json
 import uuid
 import boto3
+from botocore.config import Config
 import concurrent.futures
 from typing import List, Dict, Any
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-bedrock_client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
+# Configure the client to handle high concurrency
+custom_config = Config(
+    max_pool_connections=25, # Give it headroom above our 20 workers
+    retries={'max_attempts': 3} # Pro-tip: Add automatic retries for API hiccups
+)
+
+bedrock_client = boto3.client(
+    "bedrock-runtime", 
+    config=custom_config
+)
+
 EMBEDDING_MODEL_ID = "amazon.titan-embed-text-v2:0"
 
 def get_titan_embedding(text: str) -> List[float]:
@@ -30,6 +41,16 @@ def _embed_single_chunk(chunk: Dict[str, Any]) -> models.PointStruct | None:
     if not text:
         return None
         
+    # --- BULLETPROOF SAFETY NET ---
+    # We lowered this to 8,000 chars. This mathematically guarantees 
+    # we will never exceed the 8,192 token limit of AWS Titan.
+    if len(text) > 8000:
+        print(f"Warning: Chunk {chunk['chunk_id']} is massive ({len(text)} chars). Truncating to 8000 to fit Titan limits.")
+        text = text[:8000]
+        # We must update the payload text so the LLM reads the exact same text that was embedded
+        chunk["text"] = text 
+    # -------------------------------------
+        
     vector = get_titan_embedding(text)
     
     if vector:
@@ -43,29 +64,35 @@ def _embed_single_chunk(chunk: Dict[str, Any]) -> models.PointStruct | None:
 def process_and_ingest_document(
     parsed_chunks: List[Dict[str, Any]], 
     qdrant_client: QdrantClient, 
-    collection_name: str = "scholera_course_materials"
+    collection_name: str = "Nexus_course_materials"
 ):
     try:
         qdrant_client.get_collection(collection_name)
     except Exception:
-        print(f"Creating new Qdrant collection: {collection_name}")
+        print(f"Creating new Qdrant collection: {collection_name} with INT8 Quantization")
         qdrant_client.create_collection(
             collection_name=collection_name,
-            vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE)
+            vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE),
+            # --- OPTIMIZATION: INT8 Scalar Quantization ---
+            quantization_config=models.ScalarQuantization(
+                scalar=models.ScalarQuantizationConfig(
+                    type=models.ScalarType.INT8,
+                    quantile=0.99,
+                    always_ram=True
+                )
+            )
+            # ----------------------------------------------
         )
 
     print(f"Concurrently embedding {len(parsed_chunks)} chunks...")
     
     points = []
-    # OPTIMIZATION 1: Multithreading the network I/O
-    # 20 workers is the sweet spot for AWS Bedrock rate limits
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         results = executor.map(_embed_single_chunk, parsed_chunks)
         points = [p for p in results if p is not None]
 
-    # OPTIMIZATION 4: Bulk Upserts
     if points:
-        batch_size = 500 # Pushing 500 vectors per network call to Qdrant
+        batch_size = 500 
         for i in range(0, len(points), batch_size):
             batch = points[i:i + batch_size]
             qdrant_client.upsert(

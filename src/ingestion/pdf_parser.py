@@ -6,20 +6,18 @@ import pymupdf4llm
 import boto3
 from typing import List, Dict, Any
 import concurrent.futures
+import io
+from PIL import Image
+import uuid
 
 bedrock_client = boto3.client('bedrock-runtime', region_name=os.getenv("AWS_REGION", "us-east-1"))
-VISION_MODEL_ID = "moonshotai.kimi-k2.5"
+VISION_MODEL_ID = "moonshotai.kimi-k2.5" # Or zai.glm-5
 
-# Increased threshold: Academic slides often have a title, one bullet, and a huge diagram.
-# 300 characters is a safer net for "sparse" pages.
 CHARACTER_THRESHOLD = 300 
-
 ADMIN_KEYWORDS = ["office hours", "grading policy", "zoom link", "late submission", "prerequisites", "textbooks", "ta information", "course work", "course overview"]
 
 def clean_json_response(content: str) -> dict:
-    """Extracts JSON from an LLM response, ignoring conversational padding."""
     try:
-        # Find everything between the first { and last }
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(0))
@@ -28,7 +26,29 @@ def clean_json_response(content: str) -> dict:
         print(f"JSON Parsing Error: {e}")
         return {}
 
-def analyze_diagram_with_kimi(image_bytes: bytes) -> Dict[str, str]:
+def sanitize_extracted_text(text: str) -> str:
+    """Removes massive unbroken strings (like Base64 image leaks) that crash tokenizers."""
+    cleaned = re.sub(r'\S{200,}', '[GARBAGE_DATA_REMOVED]', text)
+    return cleaned.strip()
+
+def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str = "png") -> Dict[str, str]:
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+            
+        img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+        
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        
+        compressed_bytes = buffer.getvalue()
+        fmt = "jpeg"
+    except Exception as e:
+        print(f"Warning: Image compression failed. Error: {e}")
+        compressed_bytes = image_bytes
+        fmt = "png" if "png" in image_ext.lower() else "jpeg"
+
     prompt = """
     You are an expert academic tutor. Analyze this diagram, chart, or visual slide. 
     1. Describe the educational concept shown in high detail so it can be used for a quiz.
@@ -40,13 +60,14 @@ def analyze_diagram_with_kimi(image_bytes: bytes) -> Dict[str, str]:
         "topic_tag": "Neural Networks"
     }
     """
+    
     try:
         response = bedrock_client.converse(
             modelId=VISION_MODEL_ID,
             messages=[{
                 "role": "user",
                 "content": [
-                    {"image": {"format": "png", "source": {"bytes": image_bytes}}},
+                    {"image": {"format": fmt, "source": {"bytes": compressed_bytes}}},
                     {"text": prompt}
                 ]
             }],
@@ -56,7 +77,6 @@ def analyze_diagram_with_kimi(image_bytes: bytes) -> Dict[str, str]:
         
         parsed_json = clean_json_response(content)
         return parsed_json if parsed_json else {"description": "Visual could not be parsed.", "topic_tag": "Diagram"}
-        
     except Exception as e:
         print(f"Vision fallback failed: {e}")
         return {"description": "Vision API failed.", "topic_tag": "Diagram"}
@@ -65,67 +85,85 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Cannot find {file_path}")
 
-    print(f"Processing PDF: {filename}")
+    print(f"Processing PDF: {filename} (Semantic Grouping Enabled)")
     
     doc_chunks = pymupdf4llm.to_markdown(file_path, page_chunks=True)
     doc_pdf = fitz.open(file_path) 
     
     chunks = []
-    current_topic = "General Context"
-    vision_tasks = [] # We will collect images here to process in parallel
+    vision_tasks = [] 
     
-    for index, page_data in enumerate(doc_chunks):
-        page_num = index + 1 
-        clean_text = page_data.get("text", "").strip()
-        
-        is_admin = any(kw in clean_text.lower() for kw in ADMIN_KEYWORDS)
-        
-        chunk_data = {
-            "chunk_id": f"{course_id}_{filename}_p{page_num}",
+    # Helper to generate a fresh semantic chunk wrapper
+    def _create_new_chunk(topic: str, start_page: int) -> dict:
+        return {
+            "chunk_id": f"{course_id}_{filename}_p{start_page}_{uuid.uuid4().hex[:6]}",
             "file_name": filename,
             "course_id": course_id,
             "lecture_number": lecture_number,
-            "page_number": page_num,
-            "is_administrative": is_admin,
-            "has_math": bool(re.search(r'[\$\\]', clean_text)),
-            "used_vision": False
+            "page_number": start_page, # Tracks where the concept started
+            "is_administrative": False,
+            "has_math": False,
+            "used_vision": False,
+            "text": "",
+            "topic": topic
         }
 
+    current_chunk = _create_new_chunk("General Context", 1)
+    
+    for index, page_data in enumerate(doc_chunks):
+        page_num = index + 1 
+        clean_text = sanitize_extracted_text(page_data.get("text", ""))
+        
+        is_admin = any(kw in clean_text.lower() for kw in ADMIN_KEYWORDS)
+        
         if is_admin:
-            chunk_data["text"] = clean_text
-            chunk_data["topic"] = "Course Administration"
-            chunks.append(chunk_data)
+            admin_chunk = _create_new_chunk("Course Administration", page_num)
+            admin_chunk["is_administrative"] = True
+            admin_chunk["text"] = clean_text
+            chunks.append(admin_chunk)
             continue
 
         if len(clean_text) < CHARACTER_THRESHOLD:
-            # We flag it, grab the image, but DO NOT call Bedrock yet.
             page = doc_pdf.load_page(page_num - 1) 
             pix = page.get_pixmap(dpi=150)
             image_bytes = pix.tobytes("png")
             
-            chunk_data["text"] = clean_text
-            chunk_data["topic"] = current_topic # Inherit temporarily
-            chunk_data["used_vision"] = True
+            current_chunk["used_vision"] = True
             
+            # Pass the running chunk reference to the vision task array
             vision_tasks.append({
-                "chunk_ref": chunk_data, 
+                "chunk_ref": current_chunk, 
                 "image_bytes": image_bytes,
-                "page_num": page_num
             })
             
-        else:
-            headers = re.findall(r'^(#{1,2})\s+([A-Za-z].+)$', clean_text, re.MULTILINE)
-            if headers:
-                current_topic = headers[-1][1].replace("**", "").strip()
+            if clean_text:
+                current_chunk["text"] += f"\n{clean_text}\n"
                 
-            chunk_data["text"] = clean_text
-            chunk_data["topic"] = current_topic
+        else:
+            # SEMANTIC SPLITTING: Look for Markdown headers (##, ###)
+            headers = re.findall(r'^(#{1,3})\s+([A-Za-z].+)$', clean_text, re.MULTILINE)
             
-        chunks.append(chunk_data)
+            if headers:
+                # We found a new topic! If the current chunk has data, save it and start a new one
+                if current_chunk["text"].strip() or current_chunk["used_vision"]:
+                    chunks.append(current_chunk)
+                    new_topic = headers[-1][1].replace("**", "").strip()
+                    current_chunk = _create_new_chunk(new_topic, page_num)
+                else:
+                    # It's empty, just rename the topic
+                    current_chunk["topic"] = headers[-1][1].replace("**", "").strip()
+            
+            if bool(re.search(r'[\$\\]', clean_text)):
+                current_chunk["has_math"] = True
+                
+            current_chunk["text"] += f"\n{clean_text}\n"
+            
+    # Flush the final chunk at the end of the document
+    if current_chunk["text"].strip() or current_chunk["used_vision"]:
+        chunks.append(current_chunk)
         
     doc_pdf.close()
 
-    # --- BATCH PROCESS ALL IMAGES CONCURRENTLY ---
     if vision_tasks:
         print(f"Concurrently processing {len(vision_tasks)} vision fallbacks via Kimi 2.5...")
         
@@ -133,7 +171,6 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
             result = analyze_diagram_with_kimi(task["image_bytes"])
             return task, result
 
-        # 10 workers ensures we don't hit Bedrock rate limits while still being 10x faster
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             futures = [executor.submit(_fetch_vision, task) for task in vision_tasks]
             
@@ -141,11 +178,10 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
                 task, vision_result = future.result()
                 chunk_ref = task["chunk_ref"]
                 
-                # Inject the results back into the dictionary reference
                 original_text = chunk_ref["text"]
+                # The visual description gets injected right into the middle of the semantic chunk
                 chunk_ref["text"] = f"{original_text}\n\n[Visual Description]: {vision_result.get('description', '')}"
                 
-                # Override the inherited topic if Kimi found a better one
                 if vision_result.get("topic_tag") and vision_result.get("topic_tag") != "Diagram":
                     chunk_ref["topic"] = vision_result.get("topic_tag")
                     
@@ -157,13 +193,10 @@ if __name__ == "__main__":
     sample_pdf_path = "1-introduction.pdf"
     if os.path.exists(sample_pdf_path):
         print(f"Extracting chunks from {sample_pdf_path}...\n")
-        # Suggestion 8: Pass lecture number dynamically
         extracted_chunks = parse_pdf(sample_pdf_path, "1-introduction.pdf", "CS584", lecture_number=1)
-        
-        # Filter out administrative chunks just to see what the Vector DB would actually get
         academic_chunks = [c for c in extracted_chunks if not c.get("is_administrative")]
         
-        with open("extracted_chunks_v2.json", "w") as f:
+        with open("extracted_chunks_semantic.json", "w") as f:
             json.dump(academic_chunks, f, indent=2)
             
-        print(f"Saved {len(academic_chunks)} academic chunks (filtered out {len(extracted_chunks) - len(academic_chunks)} admin pages).")
+        print(f"Saved {len(academic_chunks)} academic chunks.")

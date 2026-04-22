@@ -1,1 +1,1 @@
-"""scholera-ai source package."""
+"""Nexus-ai source package."""

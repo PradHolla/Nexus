@@ -1,17 +1,20 @@
 import random
+import uuid
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from flashrank import Ranker, RerankRequest
 
 from src.ingestion.embedder import get_titan_embedding
 
 class QuizSampler:
-    def __init__(self, qdrant_client: QdrantClient, collection_name: str = "scholera_course_materials"):
+    def __init__(self, qdrant_client: QdrantClient, collection_name: str = "Nexus_course_materials"):
         self.client = qdrant_client
         self.collection_name = collection_name
+        # Initialize the lightweight cross-encoder model
+        self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp")
 
     def get_course_files(self, course_id: str) -> List[str]:
-        """Fetches a list of unique filenames currently stored in Qdrant for a course."""
         records, _ = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=models.Filter(
@@ -31,17 +34,12 @@ class QuizSampler:
         file_filters: Optional[List[str]] = None,
         vector_queries: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieves context chunks based on Planner Agent queries and strict file filters.
-        """
         
-        # 1. Build the base filter
         must_conditions = [
             models.FieldCondition(key="course_id", match=models.MatchValue(value=course_id)),
             models.FieldCondition(key="is_administrative", match=models.MatchValue(value=False))
         ]
 
-        # 2. Add explicit file filters if the professor selected them
         if file_filters:
             must_conditions.append(
                 models.FieldCondition(
@@ -52,13 +50,11 @@ class QuizSampler:
 
         q_filter = models.Filter(must=must_conditions)
 
-        # 3. Agentic Semantic Search (Using queries from the Planner)
         if vector_queries:
-            print(f"Executing semantic search for agent queries: {vector_queries}")
+            print(f"Executing two-stage semantic search for agent queries: {vector_queries}")
             all_results = []
             seen_ids = set()
             
-            # Divide the chunk allowance evenly among the queries
             limit_per_query = max(2, (num_questions * 2) // len(vector_queries))
 
             for query in vector_queries:
@@ -66,24 +62,43 @@ class QuizSampler:
                 if not query_vector:
                     continue
                     
+                # STAGE 1: Broad Dense Retrieval
                 search_response = self.client.query_points(
                     collection_name=self.collection_name,
                     query=query_vector,
                     query_filter=q_filter,
-                    limit=limit_per_query, 
+                    limit=30, # Cast a wide net to catch potentially missed contexts
                     with_payload=True
                 )
                 
-                # Deduplicate chunks
+                if not search_response.points:
+                    continue
+
+                # STAGE 2: Cross-Encoder Reranking
+                passages = []
                 for hit in search_response.points:
-                    chunk_id = hit.payload.get("chunk_id")
+                    passages.append({
+                        "id": hit.payload.get("chunk_id", str(uuid.uuid4())),
+                        "text": hit.payload.get("text", ""),
+                        "payload": hit.payload # Keep reference for the final output
+                    })
+
+                rerank_request = RerankRequest(query=query, passages=passages)
+                reranked_results = self.ranker.rerank(rerank_request)
+                
+                # Slice the top results post-reranking
+                top_reranked = reranked_results[:limit_per_query]
+
+                # Deduplicate chunks
+                for hit in top_reranked:
+                    chunk_id = hit["id"]
                     if chunk_id not in seen_ids:
                         seen_ids.add(chunk_id)
-                        all_results.append(hit.payload)
+                        all_results.append(hit["payload"])
                         
             return all_results
 
-        # 4. Fallback: Stratified Random Sampling
+        # Fallback: Stratified Random Sampling
         records, _ = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=q_filter,

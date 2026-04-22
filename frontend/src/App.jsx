@@ -16,7 +16,7 @@ export default function App() {
               <div className="bg-blue-600 p-2 rounded-lg">
                 <BrainCircuit className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-gray-900">Scholera AI</span>
+              <span className="text-xl font-bold tracking-tight text-gray-900">Nexus</span>
             </div>
             
             <div className="flex space-x-8">

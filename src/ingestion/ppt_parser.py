@@ -24,6 +24,13 @@ def clean_json_response(content: str) -> dict:
         print(f"JSON Parsing Error: {e}")
         return {}
 
+def sanitize_extracted_text(text: str) -> str:
+    """Removes massive unbroken strings (like Base64 image leaks or hex dumps) that crash tokenizers."""
+    # If a 'word' is over 200 characters long with no spaces, it is not human text. 
+    # This strips out Base64 leaks while preserving real paragraphs.
+    cleaned = re.sub(r'\S{200,}', '[GARBAGE_DATA_REMOVED]', text)
+    return cleaned.strip()
+
 def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str) -> Dict[str, str]:
     prompt = """
     You are an expert academic tutor. Analyze this diagram, chart, or visual slide. 
@@ -81,7 +88,7 @@ def parse_ppt(file_path: str, filename: str, course_id: str, lecture_number: int
             if hasattr(shape, "text") and shape.text:
                 text_runs.append(shape.text)
                 
-        clean_text = "\n".join(text_runs).strip()
+        clean_text = sanitize_extracted_text("\n".join(text_runs).strip())
         is_admin = any(kw in clean_text.lower() for kw in ADMIN_KEYWORDS)
         
         chunk_data = {
