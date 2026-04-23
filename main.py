@@ -22,7 +22,10 @@ from src.quiz.generator import run_planner_agent, generate_validated_quiz
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import QdrantClient
 
-qdrant_client = QdrantClient("http://localhost:6333")
+# Pull from env so Docker can route to the 'qdrant' container, fallback to localhost for uv runs
+qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+qdrant_port = os.getenv("QDRANT_PORT", "6333")
+qdrant_client = QdrantClient(f"http://{qdrant_host}:{qdrant_port}")
 sampler = QuizSampler(qdrant_client)
 
 # --- GLOBAL EXECUTOR ---
@@ -39,9 +42,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Nexus API", lifespan=lifespan)
 
+# Allow frontend origins dynamically via env var, keep localhost for dev
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[frontend_url, "http://localhost:5173"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
