@@ -7,6 +7,7 @@ export default function QuizTab() {
     course_id: 'CS584',
     num_questions: 5,
     user_prompt: 'Generate a highly difficult, conceptual quiz focusing on LSTMs and Attention Mechanisms. Strictly ignore course administration, textbook names, and grading policies.',
+    keywords: '',
     file_filters: []
   });
   
@@ -51,9 +52,13 @@ export default function QuizTab() {
     setExpandedQs({});
 
     try {
-      // If no files are selected, we send null so Qdrant searches everything
+      const processedKeywords = params.keywords
+        ? params.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
+        : null;
+
       const payload = { 
         ...params, 
+        keywords: processedKeywords && processedKeywords.length > 0 ? processedKeywords : null,
         file_filters: params.file_filters.length > 0 ? params.file_filters : null 
       };
       
@@ -88,6 +93,18 @@ export default function QuizTab() {
               onChange={e => setParams({...params, course_id: e.target.value})} 
               className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Keywords (Optional)</label>
+            <input
+              type="text"
+              placeholder="e.g., backpropagation, loss function"
+              value={params.keywords}
+              onChange={e => setParams({...params, keywords: e.target.value})}
+              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">Comma-separated keywords to anchor the semantic search.</p>
           </div>
 
           {/* Dynamic File Selector */}

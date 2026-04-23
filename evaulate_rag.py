@@ -80,7 +80,7 @@ def generate_test_data():
         "user_input": [],
         "response": [],
         "retrieved_contexts": [],
-        "ground_truth": [] # Optional for these specific metrics, but good practice
+        "ground_truth": [] 
     }
 
     course_id = "CS224"
@@ -98,14 +98,13 @@ def generate_test_data():
         context_texts = [c.get("text", "") for c in chunks]
         
         # C. Run the Generator
-        draft = run_generator_agent(
+        # FIX: Removed num_questions, as our new Generator only drafts 1 at a time
+        generated_q = run_generator_agent(
             instructions=plan.generator_instructions,
-            num_questions=1,
             context_chunks=chunks
         )
         
-        # Format the output so Ragas understands it
-        generated_q = draft.questions[0]
+        # FIX: generated_q is now directly the Pydantic object, not a list wrapper
         full_answer = f"Question: {generated_q.question_text}\nCorrect Answer: {generated_q.correct_answer}\nExplanation: {generated_q.explanation}"
         
         data_samples["user_input"].append(prompt)
