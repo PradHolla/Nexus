@@ -38,3 +38,7 @@ dist-ssr
 *.sw?
 .env
 nlp_stanford/
+
+# Application Data
+jobs.db
+qdrant_storage/

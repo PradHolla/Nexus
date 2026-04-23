@@ -2,9 +2,9 @@ import os
 import boto3
 import json
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator
 
-from src.quiz.schemas import SearchPlan, QuizDraft, GeneratedQuestion, QuarantinedQuestion, CriticReview
+from src.quiz.schemas import SearchPlan, GeneratedQuestion, QuarantinedQuestion, CriticReview
 
 bedrock_client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
 AGENT_MODEL_ID = "zai.glm-5" # Or zai.glm-5
@@ -131,8 +131,9 @@ FAIL THE QUESTION IF:
 
 CRITICAL: Return ONLY valid JSON matching this exact schema:
 {
-    "vector_queries": ["query 1", "query 2"],
-    "generator_instructions": "Focus on X, ignore Y."
+    "reasoning_scratchpad": "Evaluate the drafted question against the source chunk.",
+    "is_approved": true,
+    "feedback": "If rejected, explain why in one sentence."
 }
 """
     
@@ -158,19 +159,35 @@ Answer: {question.correct_answer}
 # ==========================================
 # ORCHESTRATION: The 3-Strike Loop
 # ==========================================
-def generate_validated_quiz(plan: SearchPlan, chunks: List[Dict[str, Any]], num_questions: int) -> QuizDraft:
-    """Manages the Generator-Critic loop and populates the Quarantine Zone."""
+def _stream_event(event_type: str, data: Dict[str, Any]) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+def generate_validated_quiz(
+    plan: SearchPlan,
+    chunks: List[Dict[str, Any]],
+    num_questions: int,
+) -> Generator[str, None, None]:
+    """Streams generation progress and final results as JSON chunks."""
     approved_questions = []
     quarantined_questions = []
+
+    yield _stream_event("generation_started", {"num_questions": num_questions})
     
     print(f"\n[Orchestrator] Beginning generation of {num_questions} questions...")
 
     for i in range(num_questions):
-        print(f"  -> Drafting Question {i+1}...")
+        question_number = i + 1
+        print(f"  -> Drafting Question {question_number}...")
         attempts = 0
         max_attempts = 3
         feedback = ""
         question_draft = None
+
+        yield _stream_event(
+            "question_started",
+            {"question_number": question_number, "max_attempts": max_attempts},
+        )
 
         while attempts < max_attempts:
             # 1. Generate
@@ -186,27 +203,50 @@ def generate_validated_quiz(plan: SearchPlan, chunks: List[Dict[str, Any]], num_
                 if review.is_approved:
                     print(f"     Approved on attempt {attempts + 1}")
                     approved_questions.append(question_draft)
+                    yield _stream_event("approved", question_draft.model_dump())
                     break
                 else:
                     attempts += 1
                     feedback = review.feedback
                     print(f"     Rejected (Attempt {attempts}/{max_attempts}): {feedback}")
+                    yield _stream_event(
+                        "rejected",
+                        {
+                            "question_number": question_number,
+                            "attempt": attempts,
+                            "feedback": feedback,
+                        },
+                    )
             except Exception as e:
                 # Catch Pydantic mapping errors if the LLM completely botches the JSON
                 attempts += 1
                 feedback = f"System Error: {str(e)}"
                 print(f"     Generation Error (Attempt {attempts}/{max_attempts}): {str(e)}")
+                yield _stream_event(
+                    "rejected",
+                    {
+                        "question_number": question_number,
+                        "attempt": attempts,
+                        "feedback": feedback,
+                    },
+                )
 
         # 3. Quarantine if it failed 3 times
         if attempts == max_attempts and question_draft:
             print("     Quarantined: Maximum retries reached.")
             # Safety check in case question_draft doesn't have the attribute
-            q_text = getattr(question_draft, 'question_text', "Failed to generate valid question text.")
-            quarantined_questions.append(
-                QuarantinedQuestion(
-                    drafted_question=q_text,
-                    rejection_reason=feedback
-                )
+            q_text = getattr(question_draft, "question_text", "Failed to generate valid question text.")
+            quarantined_question = QuarantinedQuestion(
+                drafted_question=q_text,
+                rejection_reason=feedback,
             )
+            quarantined_questions.append(quarantined_question)
+            yield _stream_event("quarantined", quarantined_question.model_dump())
 
-    return QuizDraft(questions=approved_questions, quarantined_questions=quarantined_questions)
+    yield _stream_event(
+        "complete",
+        {
+            "questions": [q.model_dump() for q in approved_questions],
+            "quarantined_questions": [q.model_dump() for q in quarantined_questions],
+        },
+    )

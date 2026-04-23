@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, Brain, ChevronDown, ChevronUp, BookOpen, FileText } from 'lucide-react';
 import { api } from '../lib/api';
 
+const API_BASE_URL = 'http://localhost:8000/api';
+
 export default function QuizTab() {
   const [params, setParams] = useState({
-    course_id: 'CS584',
+    course_id: 'cs224',
     num_questions: 5,
     user_prompt: 'Generate a highly difficult, conceptual quiz focusing on LSTMs and Attention Mechanisms. Strictly ignore course administration, textbook names, and grading policies.',
     keywords: '',
@@ -16,6 +18,7 @@ export default function QuizTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedQs, setExpandedQs] = useState({});
+  const [streamStatus, setStreamStatus] = useState('');
 
   // Fetch files whenever the course ID changes
   useEffect(() => {
@@ -48,27 +51,72 @@ export default function QuizTab() {
   const handleGenerate = async () => {
     setLoading(true);
     setError('');
-    setQuiz(null);
+    setQuiz({ questions: [], quarantined_questions: [] });
     setExpandedQs({});
+    setStreamStatus('Initializing...');
 
-    try {
-      const processedKeywords = params.keywords
-        ? params.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
-        : null;
+    const processedKeywords = params.keywords
+      ? params.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
+      : null;
 
-      const payload = { 
-        ...params, 
-        keywords: processedKeywords && processedKeywords.length > 0 ? processedKeywords : null,
-        file_filters: params.file_filters.length > 0 ? params.file_filters : null 
-      };
-      
-      const result = await api.generateQuiz(payload);
-      setQuiz(result);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    const payload = { 
+      ...params, 
+      keywords: processedKeywords && processedKeywords.length > 0 ? processedKeywords : null,
+      file_filters: params.file_filters.length > 0 ? params.file_filters : null 
+    };
+
+    const onEvent = (event) => {
+      if (!event || !event.type) return;
+
+      switch (event.type) {
+        case 'planner_started':
+          setStreamStatus('Planner is analyzing your prompt...');
+          break;
+        case 'planner_complete':
+          setStreamStatus('Planner complete. Retrieving context chunks...');
+          break;
+        case 'retrieval_started':
+          setStreamStatus('Running semantic retrieval...');
+          break;
+        case 'retrieval_complete':
+          setStreamStatus(`Retrieved ${event.data?.chunk_count ?? 0} chunks. Generating questions...`);
+          break;
+        case 'generation_started':
+          setStreamStatus(`Generating ${event.data?.num_questions ?? params.num_questions} questions...`);
+          break;
+        case 'approved':
+          setQuiz(prev => ({
+            questions: [...(prev?.questions || []), event.data],
+            quarantined_questions: prev?.quarantined_questions || [],
+          }));
+          break;
+        case 'quarantined':
+          setQuiz(prev => ({
+            questions: prev?.questions || [],
+            quarantined_questions: [...(prev?.quarantined_questions || []), event.data],
+          }));
+          break;
+        case 'complete':
+          setQuiz({
+            questions: event.data?.questions || [],
+            quarantined_questions: event.data?.quarantined_questions || [],
+          });
+          setStreamStatus('Generation complete.');
+          break;
+        case 'error':
+          setError(event.data?.message || 'Streaming failed');
+          break;
+        default:
+          break;
+      }
+    };
+
+    await api.generateQuizStream(
+      payload,
+      onEvent,
+      (err) => setError(err.message),
+      () => setLoading(false)
+    );
   };
 
   const toggleLogic = (index) => {
@@ -91,6 +139,7 @@ export default function QuizTab() {
               type="text" 
               value={params.course_id} 
               onChange={e => setParams({...params, course_id: e.target.value})} 
+              placeholder="cs224"
               className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
             />
           </div>
@@ -166,10 +215,11 @@ export default function QuizTab() {
           </div>
         )}
 
-        {loading && !quiz && (
+        {loading && (
           <div className="h-64 flex flex-col items-center justify-center text-gray-500 bg-white rounded-xl border border-gray-200 border-dashed">
             <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
             <p className="font-medium text-gray-700">Executing 3-Stage Agentic Workflow...</p>
+            {streamStatus ? <p className="text-sm mt-2 text-gray-600">{streamStatus}</p> : null}
             <ul className="text-sm mt-3 space-y-1 text-gray-500 text-center">
               <li>1. Planner Agent is generating vector queries...</li>
               <li>2. Generator Agent is drafting questions using CoT...</li>
@@ -230,6 +280,20 @@ export default function QuizTab() {
             </div>
           </div>
         ))}
+
+        {quiz && quiz.quarantined_questions && quiz.quarantined_questions.length > 0 && (
+          <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
+            <h4 className="font-semibold text-amber-900 mb-3">Quarantined Questions</h4>
+            <div className="space-y-3">
+              {quiz.quarantined_questions.map((q, idx) => (
+                <div key={idx} className="bg-white border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-900 font-medium">{q.drafted_question}</p>
+                  <p className="text-xs text-amber-700 mt-1">Reason: {q.rejection_reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
