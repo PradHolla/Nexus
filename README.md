@@ -6,7 +6,7 @@ Nexus is a full-stack, local-first retrieval-augmented generation application de
 
 **Live Subdomain**: [nexus.pradholla.com](https://nexus.pradholla.com/)
 
-**Demo Link**: [Link](https://stevens.zoom.us/rec/share/5tS-_YKVo5PlVltFjfZCfv2ZoU76yqnz2obtowOGoj7h2i2P4wbmTJT3NhQRnKrB.Aq8W8dMY7GuUs8Em?startTime=1776995143000)
+**Demo Link**: [Link](https://stevens.zoom.us/rec/share/NqTLErWLaNAzajxuTSO45eL9NhDgaUpZccyvzfor2QUdE63i5CF3tHHBBdqeRNEE.1gNIqSoQoD2Z3s6E?startTime=1777000389000)
 
 ## Architecture Highlights
 
