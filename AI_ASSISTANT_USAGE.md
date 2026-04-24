@@ -4,11 +4,11 @@ The core system architecture and engineering decisions were mine. I designed:
 
 - The hybrid concurrency model: Separating the CPU-bound document parsing (ProcessPoolExecutor) from the I/O-bound AWS Bedrock embeddings (ThreadPoolExecutor) to prevent bottlenecks.
 
-- The Agentic Orchestration: The 3-stage loop (Planner, Generator, Critic) and the specific rubric the Critic uses to reject administrative trivia or hallucinations.
+- The Agentic Orchestration: The 3-stage loop (Planner, Generator, Critic) and the specific rubric the Critic uses to reject administrative trivia or hallucinations.(I am still playing around with the system prompts)
 
 - Deployment Architecture: Using EC2 m6a.xlarge for memory safety, mounting SQLite for state persistence, utilizing IAM Roles instead of hardcoded keys, and using Caddy as a reverse proxy for the UI.
 
-I used AI to accelerate my implementation without worrying about syntax, it is pretty evident that it is LLM generated code in my repo. My AI uses:
+I used AI to accelerate my implementation without worrying about syntax, as it is pretty evident that an LLM generated code in my repo. My AI uses:
 
 - Write boilerplate Pydantic schemas and ensure they strictly matched the JSON outputs I wanted the LLMs to generate.(Annoying piece of work, forcing LLMs to adhere to a format)
 
