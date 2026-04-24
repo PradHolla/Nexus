@@ -23,7 +23,7 @@ class GeneratedQuestion(BaseModel):
     options: List[str] = Field(description="Exactly 4 multiple choice options.")
     correct_answer: str
     explanation: str
-    source_chunk_id: str
+    source_chunk_ids: List[str]
 
 class QuarantinedQuestion(BaseModel):
     """Stores a question that failed the Critic's checks after maximum retries."""

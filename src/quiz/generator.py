@@ -3,7 +3,7 @@ import boto3
 import json
 import re
 from typing import List, Dict, Any, Generator
-
+import random
 from src.quiz.schemas import SearchPlan, GeneratedQuestion, QuarantinedQuestion, CriticReview
 
 bedrock_client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1"))
@@ -79,7 +79,8 @@ CRITICAL: Return ONLY valid JSON matching this exact schema:
 def run_generator_agent(
     instructions: str, 
     context_chunks: List[Dict[str, Any]], 
-    previous_feedback: str = ""
+    previous_feedback: str = "",
+    question_style: str = "Direct conceptual question."
 ) -> GeneratedQuestion:
     
     context_string = ""
@@ -90,10 +91,14 @@ def run_generator_agent(
 
 PLANNER INSTRUCTIONS: {instructions}
 
+QUESTION STYLE REQUIREMENT: 
+You MUST write the question using this specific format: {question_style}
+
 RULES:
 1. Generate exactly 1 highly difficult question based ONLY on the provided chunks.
-2. Provide the exact source_chunk_id.
+2. Provide the exact source_chunk_ids.
 3. Use the 'reasoning_scratchpad' to think step-by-step.
+4. CRITICAL: DO NOT use "Roman Numeral" (I, II, III) or "Multiple True/False" statement formats.
 
 CRITICAL: Return ONLY valid JSON matching this exact schema:
 {{
@@ -102,7 +107,7 @@ CRITICAL: Return ONLY valid JSON matching this exact schema:
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "correct_answer": "The exact string of the correct option",
     "explanation": "Why this is correct...",
-    "source_chunk_id": "The ID of the chunk used"
+    "source_chunk_ids": ["ID of chunk 1", "ID of chunk 2"]
 }}
 """
 
@@ -176,6 +181,13 @@ def generate_validated_quiz(
     
     print(f"\n[Orchestrator] Beginning generation of {num_questions} questions...")
 
+    question_styles = [
+        "Scenario-based application: Present a hypothetical engineering or academic scenario where the student must apply the concepts to solve a problem.",
+        "Compare and contrast: Ask the student to identify the core differences, trade-offs, or scaling laws between two concepts.",
+        "Troubleshooting/Diagnostic: Present a system, equation, or architecture that is failing or acting unexpectedly, and ask the student to identify the root cause based on the text.",
+        "Direct conceptual: Ask a straightforward but highly difficult question about a specific mechanism, definition, or architectural design."
+    ]
+
     for i in range(num_questions):
         question_number = i + 1
         print(f"  -> Drafting Question {question_number}...")
@@ -183,6 +195,13 @@ def generate_validated_quiz(
         max_attempts = 3
         feedback = ""
         question_draft = None
+        
+        current_style = random.choice(question_styles)
+        
+        # --- ADD THESE TWO LINES ---
+        # Grab a random subset of up to 4 chunks from the total retrieved pool
+        sample_size = min(4, len(chunks))
+        chunk_subset = random.sample(chunks, sample_size)
 
         yield _stream_event(
             "question_started",
@@ -192,10 +211,15 @@ def generate_validated_quiz(
         while attempts < max_attempts:
             # 1. Generate
             try:
-                question_draft = run_generator_agent(plan.generator_instructions, chunks, feedback)
+                # --- UPDATE THIS LINE to pass chunk_subset instead of chunks ---
+                question_draft = run_generator_agent(plan.generator_instructions, chunk_subset, feedback, current_style)
                 
-                # Find the matching text for the critic
-                source_text = next((c.get("text") for c in chunks if c.get("chunk_id") == question_draft.source_chunk_id), "Source chunk not found.")
+                # Find the matching text for the critic (also using chunk_subset)
+                cited_chunks = [
+                    c.get("text") for c in chunk_subset 
+                    if c.get("chunk_id") in question_draft.source_chunk_ids
+                ]
+                source_text = "\n\n--- NEXT SOURCE CHUNK ---\n\n".join(cited_chunks) if cited_chunks else "Source chunks not found."
                 
                 # 2. Critique
                 review = run_critic_agent(question_draft, source_text)

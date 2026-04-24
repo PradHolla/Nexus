@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BookOpen, BrainCircuit } from 'lucide-react';
 import IngestionTab from './components/IngestionTab';
 import QuizTab from './components/QuizTab';
+import InstructionsBanner from './components/InstructionsBanner';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('ingestion');
@@ -49,7 +50,15 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'ingestion' ? <IngestionTab /> : <QuizTab />}
+        
+        {/* The new Instructions Banner goes right here at the top of the main content */}
+        <InstructionsBanner />
+        
+        {/* The active tab content renders below it */}
+        <div className="mt-6">
+          {activeTab === 'ingestion' ? <IngestionTab /> : <QuizTab />}
+        </div>
+        
       </main>
     </div>
   );

@@ -123,6 +123,20 @@ export default function QuizTab() {
     setExpandedQs(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
+  const expandAll = () => {
+    if (quiz && quiz.questions) {
+      const allExpanded = {};
+      quiz.questions.forEach((_, idx) => {
+        allExpanded[idx] = true;
+      });
+      setExpandedQs(allExpanded);
+    }
+  };
+
+  const collapseAll = () => {
+    setExpandedQs({});
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Sidebar Configuration */}
@@ -228,6 +242,23 @@ export default function QuizTab() {
           </div>
         )}
 
+        {quiz && quiz.questions && quiz.questions.length > 0 && (
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={expandAll}
+              className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium"
+            >
+              Expand All Dropdowns
+            </button>
+            <button
+              onClick={collapseAll}
+              className="px-3 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors font-medium"
+            >
+              Collapse All
+            </button>
+          </div>
+        )}
+
         {quiz && quiz.questions.map((q, idx) => (
           <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6">
@@ -268,11 +299,16 @@ export default function QuizTab() {
                       <span className="font-semibold text-gray-800 text-sm">LLM Explanation:</span>
                       <p className="text-gray-700 text-sm mt-1">{q.explanation}</p>
                     </div>
-                    <div className="flex items-center mt-3 pt-3 border-t border-blue-100">
-                      <BookOpen className="w-4 h-4 text-blue-500 mr-2" />
-                      <span className="text-xs font-mono text-blue-800 bg-blue-100 px-2 py-1 rounded">
-                        Source Chunk ID: {q.source_chunk_id}
-                      </span>
+                    <div className="flex flex-wrap items-center mt-3 pt-3 border-t border-blue-100 gap-2">
+                      <div className="flex items-center w-full mb-1">
+                        <BookOpen className="w-4 h-4 text-blue-500 mr-2" />
+                        <span className="font-semibold text-gray-800 text-sm">Source Chunks:</span>
+                      </div>
+                      {q.source_chunk_ids && q.source_chunk_ids.map((id, i) => (
+                        <span key={i} className="text-xs font-mono text-blue-800 bg-blue-100 px-2 py-1 rounded">
+                          {id}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
