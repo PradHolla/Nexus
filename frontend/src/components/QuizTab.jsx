@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Loader2, Brain, ChevronDown, ChevronUp, BookOpen, FileText } from 'lucide-react';
 import { api } from '../lib/api';
+import AgentLogPanel from './AgentLogPanel'; // <-- NEW IMPORT
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
 export default function QuizTab() {
   const [params, setParams] = useState({
-    course_id: 'cs224',
+    course_id: 'CS224',
     num_questions: 5,
     user_prompt: 'Generate a highly difficult, conceptual quiz focusing on LSTMs and Attention Mechanisms. Strictly ignore course administration, textbook names, and grading policies.',
     keywords: '',
@@ -19,6 +20,9 @@ export default function QuizTab() {
   const [error, setError] = useState('');
   const [expandedQs, setExpandedQs] = useState({});
   const [streamStatus, setStreamStatus] = useState('');
+  
+  // <-- NEW STATE FOR THE TERMINAL -->
+  const [logs, setLogs] = useState([]);
 
   // Fetch files whenever the course ID changes
   useEffect(() => {
@@ -32,7 +36,6 @@ export default function QuizTab() {
       }
     };
     
-    // Debounce the fetch slightly so it doesn't spam while typing
     const timeoutId = setTimeout(fetchFiles, 500);
     return () => clearTimeout(timeoutId);
   }, [params.course_id]);
@@ -54,6 +57,7 @@ export default function QuizTab() {
     setQuiz({ questions: [], quarantined_questions: [] });
     setExpandedQs({});
     setStreamStatus('Initializing...');
+    setLogs([]); // <-- Clear terminal on new run
 
     const processedKeywords = params.keywords
       ? params.keywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
@@ -67,6 +71,13 @@ export default function QuizTab() {
 
     const onEvent = (event) => {
       if (!event || !event.type) return;
+
+      // <-- CATCH EVERYTHING FOR THE TERMINAL -->
+      setLogs(prev => [...prev, {
+        timestamp: new Date().toLocaleTimeString([], { hour12: false }),
+        event: event.type,
+        data: event.data || {}
+      }]);
 
       switch (event.type) {
         case 'planner_started':
@@ -138,7 +149,7 @@ export default function QuizTab() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
       {/* Sidebar Configuration */}
       <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit sticky top-8">
         <h2 className="text-xl font-semibold mb-6 flex items-center text-gray-800">
@@ -153,7 +164,7 @@ export default function QuizTab() {
               type="text" 
               value={params.course_id} 
               onChange={e => setParams({...params, course_id: e.target.value})} 
-              placeholder="cs224"
+              placeholder="CS224"
               className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
             />
           </div>
@@ -221,7 +232,7 @@ export default function QuizTab() {
         </div>
       </div>
 
-      {/* Main Quiz Area (Remains identical to your previous version) */}
+      {/* Main Quiz Area */}
       <div className="lg:col-span-2 space-y-6">
         {error && (
           <div className="bg-red-50 text-red-800 p-4 rounded-lg border border-red-100">
@@ -275,7 +286,6 @@ export default function QuizTab() {
                 ))}
               </div>
 
-              {/* The "Show Logic" Toggle */}
               <div className="border-t border-gray-100 pt-4">
                 <button 
                   onClick={() => toggleLogic(idx)}
@@ -318,7 +328,7 @@ export default function QuizTab() {
         ))}
 
         {quiz && quiz.quarantined_questions && quiz.quarantined_questions.length > 0 && (
-          <div className="bg-amber-50 rounded-xl border border-amber-200 p-5">
+          <div className="bg-amber-50 rounded-xl border border-amber-200 p-5 mt-6">
             <h4 className="font-semibold text-amber-900 mb-3">Quarantined Questions</h4>
             <div className="space-y-3">
               {quiz.quarantined_questions.map((q, idx) => (
@@ -330,6 +340,10 @@ export default function QuizTab() {
             </div>
           </div>
         )}
+
+        {/* <-- THE NEW LOG PANEL AT THE BOTTOM OF THE MAIN AREA --> */}
+        <AgentLogPanel logs={logs} isGenerating={loading} title="Live Backend SSE Trace" />
+
       </div>
     </div>
   );

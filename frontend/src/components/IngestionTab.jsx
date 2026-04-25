@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, CheckCircle, Loader2, AlertCircle, FileText } from 'lucide-react';
 import { api } from '../lib/api';
+import AgentLogPanel from './AgentLogPanel';
 
 export default function IngestionTab() {
   const [courseId, setCourseId] = useState('CS224');
@@ -9,6 +10,18 @@ export default function IngestionTab() {
   const [status, setStatus] = useState('idle'); // idle, uploading, processing, complete, error
   const [errorMsg, setErrorMsg] = useState('');
   const [jobs, setJobs] = useState([]); // Array of {filename, job_id, status}
+  const [logs, setLogs] = useState([]);
+  
+  // Persistence for logs across polling cycles to prevent duplicate entries
+  const displayedLogsRef = useRef({});
+  
+  const addLog = useCallback((eventType, dataObj) => {
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toLocaleTimeString([], { hour12: false }),
+      event: eventType,
+      data: dataObj
+    }]);
+  }, []);
 
   const onDrop = useCallback(acceptedFiles => {
     setFiles(acceptedFiles);
@@ -17,23 +30,29 @@ export default function IngestionTab() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'], 'application/vnd.ms-powerpoint': ['.pptx'] }
+    accept: { 'application/pdf': ['.pdf'], 'application/vnd.ms-powerpoint': ['.pptx'], 'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'], 'application/vnd.ms-powerpoint': ['.ppt'] }
   });
 
   const handleUpload = async () => {
     if (!courseId || files.length === 0) return;
     setStatus('uploading');
     setErrorMsg('');
+    setLogs([]); 
+    displayedLogsRef.current = {}; // Clear tracker on new upload
+
+    addLog('system_start', { status: 'Preparing files for ingestion...' });
     
     try {
       const res = await api.ingestDocuments(courseId, files);
-      // res.jobs is [{filename, job_id}, ...]
+      addLog('api_ingest', res);
+
       const initialJobs = res.jobs.map(j => ({ ...j, status: 'queued' }));
       setJobs(initialJobs);
       setStatus('processing');
     } catch (err) {
       setStatus('error');
       setErrorMsg(err.message);
+      addLog('error', { detail: err.message });
     }
   };
 
@@ -50,6 +69,32 @@ export default function IngestionTab() {
               }
               try {
                 const res = await api.checkJobStatus(job.job_id);
+                
+                // 1. Log status changes
+                if (job.status !== res.status) {
+                  addLog('worker_update', { 
+                    file: job.filename, 
+                    job_id: job.job_id, 
+                    status: res.status 
+                  });
+                }
+
+                // 2. Log new backend log lines using the Ref for persistence
+                if (res.logs && res.logs.length > 0) {
+                  const jobLogsSeen = displayedLogsRef.current[job.job_id] || 0;
+                  
+                  if (res.logs.length > jobLogsSeen) {
+                    const newLogs = res.logs.slice(jobLogsSeen);
+                    newLogs.forEach(line => {
+                      addLog('backend_log', { 
+                        file: job.filename,
+                        message: line 
+                      });
+                    });
+                    displayedLogsRef.current[job.job_id] = res.logs.length;
+                  }
+                }
+
                 return { ...job, status: res.status };
               } catch (err) {
                 return { ...job, status: 'failed: connection error' };
@@ -63,6 +108,11 @@ export default function IngestionTab() {
           if (allDone) {
             const anyFailed = updatedJobs.some(j => j.status.startsWith('failed'));
             setStatus(anyFailed ? 'error' : 'complete');
+            
+            addLog('system_complete', { 
+              message: anyFailed ? 'Finished with errors.' : 'All CPU workers finished successfully.' 
+            });
+            
             clearInterval(interval);
           }
         } catch (err) {
@@ -71,7 +121,7 @@ export default function IngestionTab() {
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [status, jobs]);
+  }, [status, jobs, addLog]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -105,7 +155,7 @@ export default function IngestionTab() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-500">Drag & drop PDF/PPTX files here, or click to select</p>
+            <p className="text-gray-500">Drag & drop PDF/PPT/PPTX files here, or click to select</p>
           )}
         </div>
 
@@ -164,6 +214,13 @@ export default function IngestionTab() {
           <p className="font-semibold">Error: {errorMsg}</p>
         </div>
       )}
+
+      {/* --- LOG PANEL --- */}
+      <AgentLogPanel 
+        logs={logs} 
+        isGenerating={status === 'uploading' || status === 'processing'} 
+        title="Ingestion Database Trace" 
+      />
     </div>
   );
 }

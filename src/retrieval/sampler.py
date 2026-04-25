@@ -1,11 +1,15 @@
 import random
 import uuid
-from typing import List, Dict, Any, Optional
+import json
+from typing import List, Dict, Any, Optional, Union, Generator
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from flashrank import Ranker, RerankRequest
 
 from src.ingestion.embedder import get_titan_embedding
+
+def _sse_event(event_type: str, data: dict) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 class QuizSampler:
     def __init__(self, qdrant_client: QdrantClient, collection_name: str = "Nexus_course_materials"):
@@ -33,7 +37,7 @@ class QuizSampler:
         num_questions: int, 
         file_filters: Optional[List[str]] = None,
         vector_queries: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Generator[Union[str, List[Dict[str, Any]]], None, None]:
         
         must_conditions = [
             models.FieldCondition(key="course_id", match=models.MatchValue(value=course_id)),
@@ -51,7 +55,7 @@ class QuizSampler:
         q_filter = models.Filter(must=must_conditions)
 
         if vector_queries:
-            print(f"Executing two-stage semantic search for agent queries: {vector_queries}")
+            yield _sse_event("log", {"message": f"Executing two-stage semantic search for agent queries: {vector_queries}"})
             all_results = []
             seen_ids = set()
             
@@ -96,7 +100,8 @@ class QuizSampler:
                         seen_ids.add(chunk_id)
                         all_results.append(hit["payload"])
                         
-            return all_results
+            yield all_results
+            return
 
         # Fallback: Stratified Random Sampling
         records, _ = self.client.scroll(
@@ -106,4 +111,4 @@ class QuizSampler:
             with_payload=True,
             with_vectors=False 
         )
-        return [r.payload for r in records][:num_questions * 2]
+        yield [r.payload for r in records][:num_questions * 2]

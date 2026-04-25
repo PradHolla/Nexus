@@ -34,7 +34,7 @@ export default function InstructionsBanner() {
                 <h3 className="font-semibold text-sm">1. Ingest Course Materials</h3>
               </div>
               <p className="text-sm text-gray-600 ml-11">
-                Upload your lecture PDFs or slides in the <strong>Ingestion</strong> tab. Nexus will automatically chunk the text, process diagrams using Vision models, and store them in the vector database.
+                Upload your lecture PDFs or Slides in the <strong>Ingestion</strong> tab. Nexus will automatically chunk the text, process diagrams using Vision models, and store them in the vector database.
               </p>
             </div>
 

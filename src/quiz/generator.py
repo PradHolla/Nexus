@@ -43,8 +43,8 @@ def call_bedrock_json(system_prompt: str, user_prompt: str, temperature: float, 
 # ==========================================
 # AGENT 1: THE PLANNER
 # ==========================================
-def run_planner_agent(user_prompt: str, keywords: List[str] = None) -> SearchPlan:
-    print("[Planner Agent] Analyzing intent and formulating search plan...")
+def run_planner_agent(user_prompt: str, keywords: List[str] = None):
+    yield _stream_event("log", {"message": "[Planner Agent] Analyzing intent and formulating search plan..."})
 
     keyword_instruction = ""
     if keywords and len(keywords) > 0:
@@ -71,7 +71,7 @@ CRITICAL: Return ONLY valid JSON matching this exact schema:
             "generator_instructions": "Generate a highly difficult academic quiz based strictly on the text."
         }
         
-    return SearchPlan(**raw_json)
+    yield SearchPlan(**raw_json)
 
 # ==========================================
 # AGENT 2: THE GENERATOR
@@ -179,7 +179,7 @@ def generate_validated_quiz(
 
     yield _stream_event("generation_started", {"num_questions": num_questions})
     
-    print(f"\n[Orchestrator] Beginning generation of {num_questions} questions...")
+    yield _stream_event("log", {"message": f"[Orchestrator] Beginning generation of {num_questions} questions..."})
 
     question_styles = [
         "Scenario-based application: Present a hypothetical engineering or academic scenario where the student must apply the concepts to solve a problem.",
@@ -190,7 +190,7 @@ def generate_validated_quiz(
 
     for i in range(num_questions):
         question_number = i + 1
-        print(f"  -> Drafting Question {question_number}...")
+        yield _stream_event("log", {"message": f"  -> Drafting Question {question_number}..."})
         attempts = 0
         max_attempts = 3
         feedback = ""
@@ -225,14 +225,14 @@ def generate_validated_quiz(
                 review = run_critic_agent(question_draft, source_text)
                 
                 if review.is_approved:
-                    print(f"     Approved on attempt {attempts + 1}")
+                    yield _stream_event("log", {"message": f"     Approved on attempt {attempts + 1}"})
                     approved_questions.append(question_draft)
                     yield _stream_event("approved", question_draft.model_dump())
                     break
                 else:
                     attempts += 1
                     feedback = review.feedback
-                    print(f"     Rejected (Attempt {attempts}/{max_attempts}): {feedback}")
+                    yield _stream_event("log", {"message": f"     Rejected (Attempt {attempts}/{max_attempts}): {feedback}"})
                     yield _stream_event(
                         "rejected",
                         {
@@ -245,7 +245,7 @@ def generate_validated_quiz(
                 # Catch Pydantic mapping errors if the LLM completely botches the JSON
                 attempts += 1
                 feedback = f"System Error: {str(e)}"
-                print(f"     Generation Error (Attempt {attempts}/{max_attempts}): {str(e)}")
+                yield _stream_event("log", {"message": f"     Generation Error (Attempt {attempts}/{max_attempts}): {str(e)}"})
                 yield _stream_event(
                     "rejected",
                     {
@@ -257,7 +257,7 @@ def generate_validated_quiz(
 
         # 3. Quarantine if it failed 3 times
         if attempts == max_attempts and question_draft:
-            print("     Quarantined: Maximum retries reached.")
+            yield _stream_event("log", {"message": "     Quarantined: Maximum retries reached."})
             # Safety check in case question_draft doesn't have the attribute
             q_text = getattr(question_draft, "question_text", "Failed to generate valid question text.")
             quarantined_question = QuarantinedQuestion(

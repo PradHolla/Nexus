@@ -4,9 +4,10 @@ import uuid
 import boto3
 from botocore.config import Config
 import concurrent.futures
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from src.job_status_store import append_job_log
 
 # Configure the client to handle high concurrency
 custom_config = Config(
@@ -35,7 +36,7 @@ def get_titan_embedding(text: str) -> List[float]:
         print(f"Embedding failed: {e}")
         return []
 
-def _embed_single_chunk(chunk: Dict[str, Any]) -> models.PointStruct | None:
+def _embed_single_chunk(chunk: Dict[str, Any], jobs: Optional[List[str]] = None) -> models.PointStruct | None:
     """Helper function for the thread pool to process a single chunk."""
     text = chunk.get("text", "")
     if not text:
@@ -45,7 +46,13 @@ def _embed_single_chunk(chunk: Dict[str, Any]) -> models.PointStruct | None:
     # We lowered this to 8,000 chars. This mathematically guarantees 
     # we will never exceed the 8,192 token limit of AWS Titan.
     if len(text) > 8000:
-        print(f"Warning: Chunk {chunk['chunk_id']} is massive ({len(text)} chars). Truncating to 8000 to fit Titan limits.")
+        msg = f"Warning: Chunk {chunk['chunk_id']} is massive ({len(text)} chars). Truncating to 8000 to fit Titan limits."
+        if jobs:
+            for j_id in jobs:
+                append_job_log(j_id, msg)
+        else:
+            print(msg)
+            
         text = text[:8000]
         # We must update the payload text so the LLM reads the exact same text that was embedded
         chunk["text"] = text 
@@ -64,12 +71,19 @@ def _embed_single_chunk(chunk: Dict[str, Any]) -> models.PointStruct | None:
 def process_and_ingest_document(
     parsed_chunks: List[Dict[str, Any]], 
     qdrant_client: QdrantClient, 
-    collection_name: str = "Nexus_course_materials"
+    collection_name: str = "Nexus_course_materials",
+    jobs: Optional[List[str]] = None
 ):
     try:
         qdrant_client.get_collection(collection_name)
     except Exception:
-        print(f"Creating new Qdrant collection: {collection_name} with INT8 Quantization")
+        msg = f"Creating new Qdrant collection: {collection_name} with INT8 Quantization"
+        if jobs:
+            for j_id in jobs:
+                append_job_log(j_id, msg)
+        else:
+            print(msg)
+            
         qdrant_client.create_collection(
             collection_name=collection_name,
             vectors_config=models.VectorParams(size=1024, distance=models.Distance.COSINE),
@@ -84,12 +98,21 @@ def process_and_ingest_document(
             # ----------------------------------------------
         )
 
-    print(f"Concurrently embedding {len(parsed_chunks)} chunks...")
+    msg = f"Concurrently embedding {len(parsed_chunks)} chunks..."
+    if jobs:
+        for j_id in jobs:
+            append_job_log(j_id, msg)
+    else:
+        print(msg)
     
     points = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        results = executor.map(_embed_single_chunk, parsed_chunks)
-        points = [p for p in results if p is not None]
+        # Wrap the function to pass jobs
+        futures = [executor.submit(_embed_single_chunk, chunk, jobs) for chunk in parsed_chunks]
+        for future in concurrent.futures.as_completed(futures):
+            p = future.result()
+            if p:
+                points.append(p)
 
     if points:
         batch_size = 500 
@@ -99,6 +122,16 @@ def process_and_ingest_document(
                 collection_name=collection_name,
                 points=batch
             )
-        print(f"Successfully bulk-upserted {len(points)} vectors to Qdrant.")
+        msg = f"Successfully bulk-upserted {len(points)} vectors to Qdrant."
+        if jobs:
+            for j_id in jobs:
+                append_job_log(j_id, msg)
+        else:
+            print(msg)
     else:
-        print("No valid vectors generated.")
+        msg = "No valid vectors generated."
+        if jobs:
+            for j_id in jobs:
+                append_job_log(j_id, msg)
+        else:
+            print(msg)

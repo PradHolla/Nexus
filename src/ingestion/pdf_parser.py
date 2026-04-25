@@ -9,6 +9,7 @@ import concurrent.futures
 import io
 from PIL import Image
 import uuid
+from src.job_status_store import append_job_log
 
 bedrock_client = boto3.client('bedrock-runtime', region_name=os.getenv("AWS_REGION", "us-east-1"))
 VISION_MODEL_ID = "moonshotai.kimi-k2.5" # Or zai.glm-5
@@ -31,7 +32,7 @@ def sanitize_extracted_text(text: str) -> str:
     cleaned = re.sub(r'\S{200,}', '[GARBAGE_DATA_REMOVED]', text)
     return cleaned.strip()
 
-def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str = "png") -> Dict[str, str]:
+def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str = "png", job_id: str = None) -> Dict[str, str]:
     try:
         img = Image.open(io.BytesIO(image_bytes))
         if img.mode in ("RGBA", "P"):
@@ -45,7 +46,11 @@ def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str = "png") -> Dic
         compressed_bytes = buffer.getvalue()
         fmt = "jpeg"
     except Exception as e:
-        print(f"Warning: Image compression failed. Error: {e}")
+        msg = f"Warning: Image compression failed. Error: {e}"
+        if job_id:
+            append_job_log(job_id, msg)
+        else:
+            print(msg)
         compressed_bytes = image_bytes
         fmt = "png" if "png" in image_ext.lower() else "jpeg"
 
@@ -78,14 +83,22 @@ def analyze_diagram_with_kimi(image_bytes: bytes, image_ext: str = "png") -> Dic
         parsed_json = clean_json_response(content)
         return parsed_json if parsed_json else {"description": "Visual could not be parsed.", "topic_tag": "Diagram"}
     except Exception as e:
-        print(f"Vision fallback failed: {e}")
+        msg = f"Vision fallback failed: {e}"
+        if job_id:
+            append_job_log(job_id, msg)
+        else:
+            print(msg)
         return {"description": "Vision API failed.", "topic_tag": "Diagram"}
 
-def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int) -> List[Dict[str, Any]]:
+def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int, job_id: str = None) -> List[Dict[str, Any]]:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Cannot find {file_path}")
 
-    print(f"Processing PDF: {filename} (Semantic Grouping Enabled)")
+    msg = f"Processing PDF: {filename} (Semantic Grouping Enabled)"
+    if job_id:
+        append_job_log(job_id, msg)
+    else:
+        print(msg)
     
     doc_chunks = pymupdf4llm.to_markdown(file_path, page_chunks=True)
     doc_pdf = fitz.open(file_path) 
@@ -165,10 +178,14 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
     doc_pdf.close()
 
     if vision_tasks:
-        print(f"Concurrently processing {len(vision_tasks)} vision fallbacks via Kimi 2.5...")
+        msg = f"Concurrently processing {len(vision_tasks)} vision fallbacks via Kimi 2.5..."
+        if job_id:
+            append_job_log(job_id, msg)
+        else:
+            print(msg)
         
         def _fetch_vision(task):
-            result = analyze_diagram_with_kimi(task["image_bytes"])
+            result = analyze_diagram_with_kimi(task["image_bytes"], job_id=job_id)
             return task, result
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -185,7 +202,11 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
                 if vision_result.get("topic_tag") and vision_result.get("topic_tag") != "Diagram":
                     chunk_ref["topic"] = vision_result.get("topic_tag")
                     
-        print("Vision processing complete.")
+        msg = "Vision processing complete."
+        if job_id:
+            append_job_log(job_id, msg)
+        else:
+            print(msg)
 
     return chunks
 

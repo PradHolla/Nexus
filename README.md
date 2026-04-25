@@ -136,7 +136,7 @@ docker compose up -d
 
 4. Navigate to:
 
-* UI: [http://localhost:5173](http://localhost:5173)
+* UI: [http://localhost:3000](http://localhost:3000)
 * API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---

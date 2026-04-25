@@ -15,6 +15,8 @@ from src.ingestion.pdf_parser import parse_pdf
 from src.job_status_store import (
     init_db,
     upsert_job_status,
+    append_job_log,
+    get_job_status_and_logs,
     get_job_status as get_stored_job_status,
 )
 from src.retrieval.sampler import QuizSampler
@@ -54,23 +56,21 @@ app.add_middleware(
 )
 
 # --- INGESTION ENDPOINTS ---
-
-def _cpu_bound_parse(file_path: str, filename: str, course_id: str) -> list:
+def _cpu_bound_parse(file_path: str, filename: str, course_id: str, job_id: str = None) -> list:
     match = re.search(r'\d+', filename)
     actual_lecture_num = int(match.group()) if match else 0
-    
-    if filename.lower().endswith('.pptx'):
-        return parse_ppt(file_path, filename, course_id, lecture_number=actual_lecture_num)
+
+    if filename.lower().endswith(('.pptx', '.ppt')):
+        return parse_ppt(file_path, filename, course_id, lecture_number=actual_lecture_num, job_id=job_id)
     else:
-        return parse_pdf(file_path, filename, course_id, lecture_number=actual_lecture_num)
+        return parse_pdf(file_path, filename, course_id, lecture_number=actual_lecture_num, job_id=job_id)
 
 async def batch_ingest_task(jobs: list):
     loop = asyncio.get_running_loop()
-    
+
     for job in jobs:
         upsert_job_status(job["job_id"], "processing")
-        
-    print(f"Starting parallel CPU parsing for {len(jobs)} files...")
+        append_job_log(job["job_id"], f"Starting parallel CPU parsing for {len(jobs)} files...")
 
     tasks = [
         loop.run_in_executor(
@@ -78,10 +78,12 @@ async def batch_ingest_task(jobs: list):
             _cpu_bound_parse, 
             job["file_path"], 
             job["filename"], 
-            job["course_id"]
+            job["course_id"],
+            job["job_id"]
         )
         for job in jobs
     ]
+
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_academic_chunks = []
@@ -90,20 +92,25 @@ async def batch_ingest_task(jobs: list):
         job_id = jobs[i]["job_id"]
         if isinstance(result, Exception):
             upsert_job_status(job_id, f"failed: {str(result)}")
-            print(f"Job {job_id} failed: {result}")
+            append_job_log(job_id, f"Job failed during parsing: {result}")
         else:
             academic_chunks = [c for c in result if not c.get("is_administrative")]
             all_academic_chunks.extend(academic_chunks)
+            append_job_log(job_id, f"Successfully parsed {len(result)} chunks from {jobs[i]['filename']}.")
 
     if all_academic_chunks:
-        print(f"Sending {len(all_academic_chunks)} total chunks to the Bedrock Embedder...")
+        log_msg = f"Sending {len(all_academic_chunks)} total chunks to the Bedrock Embedder..."
+        for job in jobs:
+            append_job_log(job["job_id"], log_msg)
+            
         try:
-            process_and_ingest_document(all_academic_chunks, qdrant_client)
+            # Note: Embedder internal logs will need Job ID support too
+            process_and_ingest_document(all_academic_chunks, qdrant_client, jobs=[j["job_id"] for j in jobs])
         except Exception as e:
-            print(f"Embedding/Ingestion failed: {e}")
             for job in jobs:
                 if get_stored_job_status(job["job_id"]) == "processing":
-                    upsert_job_status(job["job_id"], f"failed: ingestion error")
+                    upsert_job_status(job["job_id"], "failed: ingestion error")
+                    append_job_log(job["job_id"], f"Embedding/Ingestion failed: {e}")
 
     # Finalize statuses and CLEANUP
     for i, result in enumerate(results):
@@ -112,16 +119,16 @@ async def batch_ingest_task(jobs: list):
         
         if not isinstance(result, Exception) and get_stored_job_status(job_id) == "processing":
             upsert_job_status(job_id, "completed")
+            append_job_log(job_id, "Batch ingestion finished successfully.")
         
         # --- CLEANUP: Remove temp file ---
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
-                print(f"Cleaned up temp file: {file_path}")
+                append_job_log(job_id, f"Cleaned up temp file: {file_path}")
             except Exception as e:
-                print(f"Failed to delete temp file {file_path}: {e}")
+                append_job_log(job_id, f"Failed to delete temp file {file_path}: {e}")
 
-    print("Batch ingestion finished.")
 
 @app.post("/api/ingest")
 async def ingest_documents(
@@ -133,7 +140,7 @@ async def ingest_documents(
     job_ids = []
     
     for file in files:
-        if not file.filename.endswith(('.pdf', '.pptx')):
+        if not file.filename.lower().endswith(('.pdf', '.pptx', '.ppt')):
             raise HTTPException(status_code=400, detail="Unsupported file type")
             
         job_id = str(uuid.uuid4())
@@ -159,10 +166,13 @@ async def ingest_documents(
 
 @app.get("/api/jobs/{job_id}")
 async def get_ingest_job_status(job_id: str):
-    status = get_stored_job_status(job_id)
-    if not status:
+    res = get_job_status_and_logs(job_id)
+    if not res:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"job_id": job_id, "status": status}
+    status, logs = res
+    # Convert newline-separated logs into a list of strings for easier frontend consumption
+    log_list = [line for line in logs.split('\n') if line.strip()]
+    return {"job_id": job_id, "status": status, "logs": log_list}
 
 # --- GENERATION ENDPOINTS ---
 
@@ -191,20 +201,29 @@ async def create_quiz(request: QuizRequest):
             # ==========================================
             # STAGE 1: THE PLANNER
             # ==========================================
-            plan = run_planner_agent(request.user_prompt, request.keywords)
-            print(f"Planner queries: {plan.vector_queries}")
+            for event in run_planner_agent(request.user_prompt, request.keywords):
+                if isinstance(event, str):
+                    yield event
+                else:
+                    plan = event
+            
+            yield _sse_event("log", {"message": f"Planner queries: {plan.vector_queries}"})
             yield _sse_event("planner_complete", {"vector_queries": plan.vector_queries})
 
             # ==========================================
             # STAGE 2: RETRIEVAL
             # ==========================================
             yield _sse_event("retrieval_started", {})
-            context_chunks = sampler.get_quiz_chunks(
+            for event in sampler.get_quiz_chunks(
                 course_id=request.course_id,
                 num_questions=request.num_questions,
                 file_filters=request.file_filters,
                 vector_queries=plan.vector_queries,
-            )
+            ):
+                if isinstance(event, str):
+                    yield event
+                else:
+                    context_chunks = event
 
             if not context_chunks:
                 yield _sse_event("error", {"message": "No course materials found for this request."})
@@ -224,7 +243,7 @@ async def create_quiz(request: QuizRequest):
                 await asyncio.sleep(0)
 
         except Exception as e:
-            print(f"API Error: {str(e)}")
+            yield _sse_event("log", {"message": f"API Error: {str(e)}"})
             yield _sse_event("error", {"message": str(e)})
 
     return StreamingResponse(

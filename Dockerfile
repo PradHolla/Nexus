@@ -4,10 +4,14 @@ FROM python:3.12-slim
 # Set the working directory
 WORKDIR /app
 
-# Install system dependencies (for PDF parsing and other tasks if needed)
+# Install system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    libreoffice \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install 'uv' for fast dependency management

@@ -1,7 +1,7 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator, Optional, Tuple
 
 DB_PATH = Path(__file__).resolve().parents[1] / "jobs.db"
 
@@ -24,28 +24,47 @@ def init_db() -> None:
             """
             CREATE TABLE IF NOT EXISTS JobStatus (
                 job_id TEXT PRIMARY KEY,
-                status TEXT NOT NULL
+                status TEXT NOT NULL,
+                logs TEXT DEFAULT ''
             )
             """
         )
+        # Ensure 'logs' column exists for users with older databases
+        try:
+            conn.execute("ALTER TABLE JobStatus ADD COLUMN logs TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
 
 
 def upsert_job_status(job_id: str, status: str) -> None:
     with _get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO JobStatus (job_id, status)
-            VALUES (?, ?)
+            INSERT INTO JobStatus (job_id, status, logs)
+            VALUES (?, ?, '')
             ON CONFLICT(job_id) DO UPDATE SET status = excluded.status
             """,
             (job_id, status),
         )
 
+def append_job_log(job_id: str, message: str) -> None:
+    """Appends a log message to the job's log history."""
+    with _get_connection() as conn:
+        conn.execute(
+            "UPDATE JobStatus SET logs = logs || ? || CHAR(10) WHERE job_id = ?",
+            (message, job_id),
+        )
 
-def get_job_status(job_id: str) -> Optional[str]:
+def get_job_status_and_logs(job_id: str) -> Optional[Tuple[str, str]]:
+    """Returns both the status and the full log history for a job."""
     with _get_connection() as conn:
         row = conn.execute(
-            "SELECT status FROM JobStatus WHERE job_id = ?",
+            "SELECT status, logs FROM JobStatus WHERE job_id = ?",
             (job_id,),
         ).fetchone()
-        return row[0] if row else None
+        return (row[0], row[1]) if row else None
+
+
+def get_job_status(job_id: str) -> Optional[str]:
+    res = get_job_status_and_logs(job_id)
+    return res[0] if res else None
