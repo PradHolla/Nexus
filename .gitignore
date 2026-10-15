@@ -34,8 +34,8 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Claude Code personal settings
-.claude/settings.local.json
+# Claude Code
+.claude/
 
 # Secrets
 .env
