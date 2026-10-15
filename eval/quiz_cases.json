@@ -1,0 +1,77 @@
+[
+  {
+    "id": "broad_course",
+    "course_id": "CS224",
+    "num_questions": 5,
+    "user_prompt": "Create a quiz covering the core ideas of this course.",
+    "keywords": null,
+    "file_filters": null
+  },
+  {
+    "id": "topic_attention",
+    "course_id": "CS224",
+    "num_questions": 5,
+    "user_prompt": "Quiz students on attention mechanisms and the Transformer architecture.",
+    "keywords": null,
+    "file_filters": null
+  },
+  {
+    "id": "single_file_transformers",
+    "course_id": "CS224",
+    "num_questions": 4,
+    "user_prompt": "Test understanding of this lecture.",
+    "keywords": null,
+    "file_filters": [
+      "cs224n-spr2024-lecture08-transformers.pdf"
+    ]
+  },
+  {
+    "id": "multi_file_rnn",
+    "course_id": "CS224",
+    "num_questions": 5,
+    "user_prompt": "Assess understanding of recurrent language models and their improvements.",
+    "keywords": null,
+    "file_filters": [
+      "cs224n-spr2024-lecture05-rnnlm.pdf",
+      "cs224n-spr2024-lecture06-fancy-rnn.pdf"
+    ]
+  },
+  {
+    "id": "keywords_alignment",
+    "course_id": "CS224",
+    "num_questions": 5,
+    "user_prompt": "Quiz on how language models are aligned with human preferences.",
+    "keywords": [
+      "RLHF",
+      "DPO",
+      "reward model"
+    ],
+    "file_filters": null
+  },
+  {
+    "id": "vague_midterm",
+    "course_id": "CS224",
+    "num_questions": 6,
+    "user_prompt": "Midterm review quiz.",
+    "keywords": null,
+    "file_filters": null
+  },
+  {
+    "id": "sparse_file",
+    "course_id": "CS224",
+    "num_questions": 4,
+    "user_prompt": "Quiz on this lecture.",
+    "keywords": null,
+    "file_filters": [
+      "cs224n-2024-lecture17-human-centered-nlp.pdf"
+    ]
+  },
+  {
+    "id": "large_broad",
+    "course_id": "CS224",
+    "num_questions": 10,
+    "user_prompt": "Write a quiz on deep learning fundamentals for NLP.",
+    "keywords": null,
+    "file_filters": null
+  }
+]

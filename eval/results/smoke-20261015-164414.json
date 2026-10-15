@@ -1,0 +1,555 @@
+{
+  "label": "smoke",
+  "timestamp": "2026-10-15T16:44:14",
+  "base_url": "http://localhost:8000",
+  "git": {
+    "commit": "8bba45d",
+    "dirty": true
+  },
+  "dup_threshold": 0.9,
+  "judge_model": "claude-haiku-5-5",
+  "cases": [
+    {
+      "id": "single_file_transformers",
+      "request": {
+        "course_id": "CS224",
+        "num_questions": 4,
+        "user_prompt": "Test understanding of this lecture.",
+        "keywords": null,
+        "file_filters": [
+          "cs224n-spr2024-lecture08-transformers.pdf"
+        ]
+      },
+      "events": [
+        {
+          "t": 0.029,
+          "event": "planner_started",
+          "data": {}
+        },
+        {
+          "t": 0.029,
+          "event": "log",
+          "data": {
+            "message": "[Planner Agent] Analyzing intent and formulating search plan..."
+          }
+        },
+        {
+          "t": 1.575,
+          "event": "log",
+          "data": {
+            "message": "Planner queries: ['key concepts and definitions from lecture', 'lecture summary and main topics', 'lecture examples and case studies']"
+          }
+        },
+        {
+          "t": 1.575,
+          "event": "planner_complete",
+          "data": {
+            "vector_queries": [
+              "key concepts and definitions from lecture",
+              "lecture summary and main topics",
+              "lecture examples and case studies"
+            ]
+          }
+        },
+        {
+          "t": 1.576,
+          "event": "retrieval_started",
+          "data": {}
+        },
+        {
+          "t": 1.576,
+          "event": "log",
+          "data": {
+            "message": "Executing retrieval for agent queries: ['key concepts and definitions from lecture', 'lecture summary and main topics', 'lecture examples and case studies']"
+          }
+        },
+        {
+          "t": 1.584,
+          "event": "log",
+          "data": {
+            "message": "Falling back to dense-only retrieval (hybrid unavailable)."
+          }
+        },
+        {
+          "t": 4.524,
+          "event": "retrieval_complete",
+          "data": {
+            "chunk_count": 3
+          }
+        },
+        {
+          "t": 4.524,
+          "event": "generation_started",
+          "data": {
+            "num_questions": 4
+          }
+        },
+        {
+          "t": 4.524,
+          "event": "log",
+          "data": {
+            "message": "[Orchestrator] Beginning generation of 4 questions..."
+          }
+        },
+        {
+          "t": 4.524,
+          "event": "log",
+          "data": {
+            "message": "  -> Drafting Question 1..."
+          }
+        },
+        {
+          "t": 4.524,
+          "event": "question_started",
+          "data": {
+            "question_number": 1,
+            "max_attempts": 3
+          }
+        },
+        {
+          "t": 19.492,
+          "event": "log",
+          "data": {
+            "message": "     Approved on attempt 1"
+          }
+        },
+        {
+          "t": 19.492,
+          "event": "approved",
+          "data": {
+            "reasoning_scratchpad": "Step 1: Analyze the chunks to identify core concepts. The chunks discuss Transformer architecture motivations (computational complexity, path length, parallelizability), self-attention mechanisms, and comparisons with RNNs.\n\nStep 2: Focus on the three desirata from Chunk 1 (p17-20): (1) Minimize computational complexity per layer, (2) Minimize path length between word pairs (O(1) for Transformers vs O(sequence length) for RNNs), (3) Maximize parallelizability.\n\nStep 3: Chunk 2 (p22-24) explains self-attention and compares computational dependencies. Key points: Transformers have O(1) maximum interaction distance and unparallelizable operations don't increase with sequence length.\n\nStep 4: Chunk 3 (p60) mentions quadratic self-attention cost O(T\u00b2) and modifications like BigBird.\n\nStep 5: Create a scenario-based question testing understanding of why Transformers were designed to overcome RNN limitations. The question should require applying knowledge of computational complexity and interaction distance to analyze a hypothetical architecture choice.\n\nStep 6: Design a scenario where an engineer must choose between architectures based on specific requirements about long-range dependencies and computational efficiency. The correct answer should demonstrate understanding that Transformers provide O(1) interaction distance while RNNs have O(sequence length).",
+            "question_text": "A research team is designing a neural architecture for processing long legal documents where understanding relationships between clauses separated by thousands of words is critical. They are evaluating two approaches: (1) A bidirectional LSTM-based encoder with attention, and (2) A standard Transformer encoder. The team specifically notes that their documents have sequence length n = 10,000 and representation dimension d = 512. Based on the Transformer design motivations and computational properties discussed in the lecture, which statement accurately contrasts these two architectures for this specific use case?",
+            "options": [
+              "The Transformer is disadvantageous because its self-attention complexity per layer is O(n\u00b2d), which exceeds the RNN's O(nd\u00b2) complexity when n > d, making the RNN more computationally efficient for this document length.",
+              "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+              "The Transformer and RNN offer equivalent capabilities for long-range dependencies since both use attention mechanisms; the primary difference is that Transformers can only process sequences bidirectionally while RNNs process them unidirectionally.",
+              "The Transformer is unsuitable for this task because self-attention eliminates all sequential inductive bias, meaning the model cannot leverage the inherent ordering of words in legal documents unlike the RNN which naturally encodes linear locality."
+            ],
+            "correct_answer": "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+            "explanation": "According to the lecture, one of the three key motivations for the Transformer architecture was minimizing the path length between any pair of words to facilitate learning of long-range dependencies. The lecture explicitly states that RNNs take O(sequence length) steps for distant word pairs to interact, creating gradient problems for long-distance dependencies. In contrast, Transformers have O(1) maximum interaction distance since 'each word interacts with each other' directly through self-attention. While it's true that Transformer self-attention has O(n\u00b2) complexity (mentioned in the context of BigBird addressing this), the key advantage for long-range dependencies is the O(1) interaction distance, making option B the correct characterization of this trade-off.",
+            "source_chunk_ids": [
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+            ]
+          }
+        },
+        {
+          "t": 19.492,
+          "event": "log",
+          "data": {
+            "message": "  -> Drafting Question 2..."
+          }
+        },
+        {
+          "t": 19.493,
+          "event": "question_started",
+          "data": {
+            "question_number": 2,
+            "max_attempts": 3
+          }
+        },
+        {
+          "t": 30.21,
+          "event": "log",
+          "data": {
+            "message": "     Approved on attempt 1"
+          }
+        },
+        {
+          "t": 30.21,
+          "event": "approved",
+          "data": {
+            "reasoning_scratchpad": "Step 1: Analyze the request. I need to create a highly difficult troubleshooting/diagnostic question based on the provided lecture chunks about Transformers.\n\nStep 2: Review the source material. The chunks cover:\n- Motivation for Transformers vs RNNs (complexity, path length, parallelizability)\n- Computational complexity comparison (RNN: O(n) sequential, Transformer: O(1) sequential but O(n^2) self-attention)\n- Self-attention mechanism\n- BigBird modification for reducing quadratic cost\n- Finding that most Transformer modifications don't meaningfully improve performance\n\nStep 3: Identify a diagnostic scenario. A good scenario would involve a researcher or engineer observing unexpected behavior when trying to 'improve' a Transformer model or comparing it to an RNN baseline.\n\nStep 4: Draft the scenario. A researcher is comparing an RNN-based model to a Transformer on a very long sequence task. They observe that while the Transformer trains faster on short sequences, it runs out of memory on long sequences, whereas the RNN (while slower) can process them. They attempt to fix this by implementing a modification (like BigBird-style sparse attention) expecting significant performance gains, but find the results disappointing.\n\nStep 5: Formulate the question. The question should ask for the ROOT CAUSE of why their modification didn't yield the expected improvement.\n\nStep 6: Develop options based on the text:\n- Option A: The modification increased computational complexity (incorrect - BigBird reduces it)\n- Option B: The modification increased the path length between words (partially true but not the main point)\n- Option C: Most Transformer modifications do not meaningfully improve performance (correct - directly from chunk 61)\n- Option D: The modification prevented parallelization (incorrect)\n\nStep 7: Refine for difficulty. Make the scenario more specific and the distractors more plausible based on the technical details in the lecture.",
+            "question_text": "A research team is developing a model for processing long legal documents. They initially implement a standard Transformer, but encounter out-of-memory errors due to the quadratic self-attention cost with long sequences. To address this, they replace the all-pairs self-attention with a BigBird-style mechanism (using local windows, random interactions, and global tokens). Based on the lecture findings, what is the most likely outcome of this modification?",
+            "options": [
+              "The modification will significantly improve performance because it reduces the O(n\u00b2) complexity while maintaining the O(1) maximum interaction distance.",
+              "The modification will fail to train because removing all-pairs attention eliminates the ability for words to attend to each other.",
+              "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+              "The modification will degrade performance proportionally to the reduction in random interactions, as these are the most critical component for learning long-range dependencies."
+            ],
+            "correct_answer": "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+            "explanation": "According to the lecture slides discussing 'Do Transformer Modifications Transfer?', the key finding states: 'Surprisingly, we find that most modifications do not meaningfully improve performance.' While BigBird and similar approaches address the quadratic self-attention cost, the empirical evidence suggests that architectural modifications to Transformers often do not provide the performance improvements researchers expect, even if they successfully reduce computational complexity.",
+            "source_chunk_ids": [
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p60_4aa634",
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+            ]
+          }
+        },
+        {
+          "t": 30.21,
+          "event": "log",
+          "data": {
+            "message": "  -> Drafting Question 3..."
+          }
+        },
+        {
+          "t": 30.21,
+          "event": "question_started",
+          "data": {
+            "question_number": 3,
+            "max_attempts": 3
+          }
+        },
+        {
+          "t": 41.921,
+          "event": "log",
+          "data": {
+            "message": "     Approved on attempt 1"
+          }
+        },
+        {
+          "t": 41.921,
+          "event": "approved",
+          "data": {
+            "reasoning_scratchpad": "I need to create a difficult question comparing and contrasting RNNs and Transformers based on the provided chunks. Let me analyze the key differences presented:\n\n1. Computational Complexity (Chunk 1, p.17-18):\n- When n << d, Transformers have lower complexity per layer\n- Table 1 mentioned but details not fully shown\n\n2. Path Length/Interaction Distance (Chunk 1, p.18-20):\n- RNNs: O(sequence length) steps for distant word pairs to interact\n- Transformers: O(1) maximum interaction distance\n- RNNs have linear locality baked in, which is useful for nearby words but problematic for long-range dependencies\n\n3. Parallelizability (Chunk 1, p.21, Chunk 2, p.23-24):\n- RNNs: O(sequence length) unparallelizable operations in forward/backward passes\n- Transformers: Number of unparallelizable operations does NOT increase with sequence length\n\n4. Self-Attention vs Recurrence (Chunk 2, p.22-24):\n- Self-attention allows each word to attend to every other word\n- RNNs process sequentially left-to-right\n\n5. Trade-offs mentioned (Chunk 3, p.60):\n- Transformers have O(T\u00b2) all-pairs self-attention cost\n- BigBird and other variants try to address this quadratic cost\n\nThe question should test understanding of these core trade-offs. A good question would ask students to identify the correct comparison between computational dependencies, parallelization, or interaction distances.",
+            "question_text": "Compare and contrast the computational dependencies of RNN-based models versus Transformer-based models. Which of the following accurately describes the trade-offs between these two architectures regarding parallelizability and interaction distance?",
+            "options": [
+              "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have O(1) unparallelizable operations and O(1) maximum interaction distance between any word pair.",
+              "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+              "Both RNNs and Transformers have O(sequence length) unparallelizable operations, but Transformers achieve O(1) maximum interaction distance through self-attention while RNNs require O(sequence length) steps for distant word pairs to interact.",
+              "RNNs have O(1) unparallelizable operations due to their sequential nature, whereas Transformers have O(sequence length) unparallelizable operations but compensate with O(1) maximum interaction distance through all-pairs self-attention."
+            ],
+            "correct_answer": "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+            "explanation": "According to the lecture slides, RNNs have O(sequence length) unparallelizable operations in forward and backward passes due to their sequential 'left-to-right' processing, and distant word pairs require O(sequence length) steps to interact. In contrast, Transformers have a number of unparallelizable operations that does NOT increase with sequence length (enabling greater parallelization on GPUs), and since each word attends to every other word through self-attention, the maximum interaction distance is O(1). This is explicitly stated in the 'Computational Dependencies for Recurrence vs. Attention' comparison slides.",
+            "source_chunk_ids": [
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+            ]
+          }
+        },
+        {
+          "t": 41.921,
+          "event": "log",
+          "data": {
+            "message": "  -> Drafting Question 4..."
+          }
+        },
+        {
+          "t": 41.921,
+          "event": "question_started",
+          "data": {
+            "question_number": 4,
+            "max_attempts": 3
+          }
+        },
+        {
+          "t": 54.923,
+          "event": "log",
+          "data": {
+            "message": "     Approved on attempt 1"
+          }
+        },
+        {
+          "t": 54.923,
+          "event": "approved",
+          "data": {
+            "reasoning_scratchpad": "I need to create a troubleshooting/diagnostic question based on the provided chunks. The chunks discuss the Transformer architecture, its motivations, and advantages over RNNs. Key concepts include:\n\n1. Self-attention mechanism where each word attends to all other words\n2. Transformer advantages: O(1) maximum interaction distance, parallelizable operations\n3. RNN disadvantages: O(sequence length) steps for distant word pairs to interact, O(seq length) unparallelizable operations\n4. Computational complexity: When n << d, Transformer complexity per layer is lower\n5. The quadratic cost of self-attention O(T\u00b2) and attempts to improve it (like BigBird)\n\nFor a troubleshooting question, I should present a scenario where a model is failing or acting unexpectedly and ask the student to identify the root cause. A good scenario would be contrasting RNN vs Transformer behavior on long-range dependencies.\n\nQuestion idea: A researcher is training two models (RNN-based and Transformer-based) on a task requiring long-range dependency learning. The RNN model struggles to learn dependencies between distant words while the Transformer succeeds. Ask why this happens based on the 'linear interaction distance' concept.\n\nLet me make this more diagnostic: Present a scenario where an RNN-based model is failing to capture long-range dependencies in a specific sentence, and ask the student to identify the root cause based on the computational properties discussed in the lecture.",
+            "question_text": "A researcher is debugging a language model that uses a bidirectional LSTM encoder with attention for a machine translation task. The model performs well on short sentences but consistently fails to correctly translate sentences with long-range subject-verb dependencies, such as 'The chef who prepared the elaborate seven-course meal for the distinguished guests ___ the compliments gracefully' (where 'chef' must agree with 'accepted'). Gradient analysis shows that the signal from the loss at the verb position diminishes significantly before reaching the subject position's representation. Based on the lecture's comparison of computational dependencies between RNNs and Transformers, what is the root cause of this failure?",
+            "options": [
+              "The attention mechanism adds O(n\u00b2) computational complexity per layer, causing gradient explosion when sequence length increases",
+              "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+              "The bidirectional LSTM encoder cannot parallelize its forward pass, limiting the model's ability to process long sequences efficiently during training",
+              "The attention mechanism in the encoder-decoder architecture only allows sparse connections between encoder and decoder positions, preventing information flow from subject to verb"
+            ],
+            "correct_answer": "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+            "explanation": "The lecture explicitly states that RNNs take 'O(sequence length) steps for distant word pairs to interact' and identifies this as a problem because it is 'Hard to learn long-distance dependencies (because gradient problems!)'. The information from 'chef' must go through O(sequence length) many layers to reach the position of the verb, causing gradient vanishing/exploding issues. In contrast, Transformers have O(1) maximum interaction distance because 'each word interacts with each other' directly through self-attention.",
+            "source_chunk_ids": [
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+              "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+            ]
+          }
+        },
+        {
+          "t": 54.924,
+          "event": "complete",
+          "data": {
+            "questions": [
+              {
+                "reasoning_scratchpad": "Step 1: Analyze the chunks to identify core concepts. The chunks discuss Transformer architecture motivations (computational complexity, path length, parallelizability), self-attention mechanisms, and comparisons with RNNs.\n\nStep 2: Focus on the three desirata from Chunk 1 (p17-20): (1) Minimize computational complexity per layer, (2) Minimize path length between word pairs (O(1) for Transformers vs O(sequence length) for RNNs), (3) Maximize parallelizability.\n\nStep 3: Chunk 2 (p22-24) explains self-attention and compares computational dependencies. Key points: Transformers have O(1) maximum interaction distance and unparallelizable operations don't increase with sequence length.\n\nStep 4: Chunk 3 (p60) mentions quadratic self-attention cost O(T\u00b2) and modifications like BigBird.\n\nStep 5: Create a scenario-based question testing understanding of why Transformers were designed to overcome RNN limitations. The question should require applying knowledge of computational complexity and interaction distance to analyze a hypothetical architecture choice.\n\nStep 6: Design a scenario where an engineer must choose between architectures based on specific requirements about long-range dependencies and computational efficiency. The correct answer should demonstrate understanding that Transformers provide O(1) interaction distance while RNNs have O(sequence length).",
+                "question_text": "A research team is designing a neural architecture for processing long legal documents where understanding relationships between clauses separated by thousands of words is critical. They are evaluating two approaches: (1) A bidirectional LSTM-based encoder with attention, and (2) A standard Transformer encoder. The team specifically notes that their documents have sequence length n = 10,000 and representation dimension d = 512. Based on the Transformer design motivations and computational properties discussed in the lecture, which statement accurately contrasts these two architectures for this specific use case?",
+                "options": [
+                  "The Transformer is disadvantageous because its self-attention complexity per layer is O(n\u00b2d), which exceeds the RNN's O(nd\u00b2) complexity when n > d, making the RNN more computationally efficient for this document length.",
+                  "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+                  "The Transformer and RNN offer equivalent capabilities for long-range dependencies since both use attention mechanisms; the primary difference is that Transformers can only process sequences bidirectionally while RNNs process them unidirectionally.",
+                  "The Transformer is unsuitable for this task because self-attention eliminates all sequential inductive bias, meaning the model cannot leverage the inherent ordering of words in legal documents unlike the RNN which naturally encodes linear locality."
+                ],
+                "correct_answer": "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+                "explanation": "According to the lecture, one of the three key motivations for the Transformer architecture was minimizing the path length between any pair of words to facilitate learning of long-range dependencies. The lecture explicitly states that RNNs take O(sequence length) steps for distant word pairs to interact, creating gradient problems for long-distance dependencies. In contrast, Transformers have O(1) maximum interaction distance since 'each word interacts with each other' directly through self-attention. While it's true that Transformer self-attention has O(n\u00b2) complexity (mentioned in the context of BigBird addressing this), the key advantage for long-range dependencies is the O(1) interaction distance, making option B the correct characterization of this trade-off.",
+                "source_chunk_ids": [
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+                ]
+              },
+              {
+                "reasoning_scratchpad": "Step 1: Analyze the request. I need to create a highly difficult troubleshooting/diagnostic question based on the provided lecture chunks about Transformers.\n\nStep 2: Review the source material. The chunks cover:\n- Motivation for Transformers vs RNNs (complexity, path length, parallelizability)\n- Computational complexity comparison (RNN: O(n) sequential, Transformer: O(1) sequential but O(n^2) self-attention)\n- Self-attention mechanism\n- BigBird modification for reducing quadratic cost\n- Finding that most Transformer modifications don't meaningfully improve performance\n\nStep 3: Identify a diagnostic scenario. A good scenario would involve a researcher or engineer observing unexpected behavior when trying to 'improve' a Transformer model or comparing it to an RNN baseline.\n\nStep 4: Draft the scenario. A researcher is comparing an RNN-based model to a Transformer on a very long sequence task. They observe that while the Transformer trains faster on short sequences, it runs out of memory on long sequences, whereas the RNN (while slower) can process them. They attempt to fix this by implementing a modification (like BigBird-style sparse attention) expecting significant performance gains, but find the results disappointing.\n\nStep 5: Formulate the question. The question should ask for the ROOT CAUSE of why their modification didn't yield the expected improvement.\n\nStep 6: Develop options based on the text:\n- Option A: The modification increased computational complexity (incorrect - BigBird reduces it)\n- Option B: The modification increased the path length between words (partially true but not the main point)\n- Option C: Most Transformer modifications do not meaningfully improve performance (correct - directly from chunk 61)\n- Option D: The modification prevented parallelization (incorrect)\n\nStep 7: Refine for difficulty. Make the scenario more specific and the distractors more plausible based on the technical details in the lecture.",
+                "question_text": "A research team is developing a model for processing long legal documents. They initially implement a standard Transformer, but encounter out-of-memory errors due to the quadratic self-attention cost with long sequences. To address this, they replace the all-pairs self-attention with a BigBird-style mechanism (using local windows, random interactions, and global tokens). Based on the lecture findings, what is the most likely outcome of this modification?",
+                "options": [
+                  "The modification will significantly improve performance because it reduces the O(n\u00b2) complexity while maintaining the O(1) maximum interaction distance.",
+                  "The modification will fail to train because removing all-pairs attention eliminates the ability for words to attend to each other.",
+                  "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+                  "The modification will degrade performance proportionally to the reduction in random interactions, as these are the most critical component for learning long-range dependencies."
+                ],
+                "correct_answer": "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+                "explanation": "According to the lecture slides discussing 'Do Transformer Modifications Transfer?', the key finding states: 'Surprisingly, we find that most modifications do not meaningfully improve performance.' While BigBird and similar approaches address the quadratic self-attention cost, the empirical evidence suggests that architectural modifications to Transformers often do not provide the performance improvements researchers expect, even if they successfully reduce computational complexity.",
+                "source_chunk_ids": [
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p60_4aa634",
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+                ]
+              },
+              {
+                "reasoning_scratchpad": "I need to create a difficult question comparing and contrasting RNNs and Transformers based on the provided chunks. Let me analyze the key differences presented:\n\n1. Computational Complexity (Chunk 1, p.17-18):\n- When n << d, Transformers have lower complexity per layer\n- Table 1 mentioned but details not fully shown\n\n2. Path Length/Interaction Distance (Chunk 1, p.18-20):\n- RNNs: O(sequence length) steps for distant word pairs to interact\n- Transformers: O(1) maximum interaction distance\n- RNNs have linear locality baked in, which is useful for nearby words but problematic for long-range dependencies\n\n3. Parallelizability (Chunk 1, p.21, Chunk 2, p.23-24):\n- RNNs: O(sequence length) unparallelizable operations in forward/backward passes\n- Transformers: Number of unparallelizable operations does NOT increase with sequence length\n\n4. Self-Attention vs Recurrence (Chunk 2, p.22-24):\n- Self-attention allows each word to attend to every other word\n- RNNs process sequentially left-to-right\n\n5. Trade-offs mentioned (Chunk 3, p.60):\n- Transformers have O(T\u00b2) all-pairs self-attention cost\n- BigBird and other variants try to address this quadratic cost\n\nThe question should test understanding of these core trade-offs. A good question would ask students to identify the correct comparison between computational dependencies, parallelization, or interaction distances.",
+                "question_text": "Compare and contrast the computational dependencies of RNN-based models versus Transformer-based models. Which of the following accurately describes the trade-offs between these two architectures regarding parallelizability and interaction distance?",
+                "options": [
+                  "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have O(1) unparallelizable operations and O(1) maximum interaction distance between any word pair.",
+                  "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+                  "Both RNNs and Transformers have O(sequence length) unparallelizable operations, but Transformers achieve O(1) maximum interaction distance through self-attention while RNNs require O(sequence length) steps for distant word pairs to interact.",
+                  "RNNs have O(1) unparallelizable operations due to their sequential nature, whereas Transformers have O(sequence length) unparallelizable operations but compensate with O(1) maximum interaction distance through all-pairs self-attention."
+                ],
+                "correct_answer": "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+                "explanation": "According to the lecture slides, RNNs have O(sequence length) unparallelizable operations in forward and backward passes due to their sequential 'left-to-right' processing, and distant word pairs require O(sequence length) steps to interact. In contrast, Transformers have a number of unparallelizable operations that does NOT increase with sequence length (enabling greater parallelization on GPUs), and since each word attends to every other word through self-attention, the maximum interaction distance is O(1). This is explicitly stated in the 'Computational Dependencies for Recurrence vs. Attention' comparison slides.",
+                "source_chunk_ids": [
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+                ]
+              },
+              {
+                "reasoning_scratchpad": "I need to create a troubleshooting/diagnostic question based on the provided chunks. The chunks discuss the Transformer architecture, its motivations, and advantages over RNNs. Key concepts include:\n\n1. Self-attention mechanism where each word attends to all other words\n2. Transformer advantages: O(1) maximum interaction distance, parallelizable operations\n3. RNN disadvantages: O(sequence length) steps for distant word pairs to interact, O(seq length) unparallelizable operations\n4. Computational complexity: When n << d, Transformer complexity per layer is lower\n5. The quadratic cost of self-attention O(T\u00b2) and attempts to improve it (like BigBird)\n\nFor a troubleshooting question, I should present a scenario where a model is failing or acting unexpectedly and ask the student to identify the root cause. A good scenario would be contrasting RNN vs Transformer behavior on long-range dependencies.\n\nQuestion idea: A researcher is training two models (RNN-based and Transformer-based) on a task requiring long-range dependency learning. The RNN model struggles to learn dependencies between distant words while the Transformer succeeds. Ask why this happens based on the 'linear interaction distance' concept.\n\nLet me make this more diagnostic: Present a scenario where an RNN-based model is failing to capture long-range dependencies in a specific sentence, and ask the student to identify the root cause based on the computational properties discussed in the lecture.",
+                "question_text": "A researcher is debugging a language model that uses a bidirectional LSTM encoder with attention for a machine translation task. The model performs well on short sentences but consistently fails to correctly translate sentences with long-range subject-verb dependencies, such as 'The chef who prepared the elaborate seven-course meal for the distinguished guests ___ the compliments gracefully' (where 'chef' must agree with 'accepted'). Gradient analysis shows that the signal from the loss at the verb position diminishes significantly before reaching the subject position's representation. Based on the lecture's comparison of computational dependencies between RNNs and Transformers, what is the root cause of this failure?",
+                "options": [
+                  "The attention mechanism adds O(n\u00b2) computational complexity per layer, causing gradient explosion when sequence length increases",
+                  "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+                  "The bidirectional LSTM encoder cannot parallelize its forward pass, limiting the model's ability to process long sequences efficiently during training",
+                  "The attention mechanism in the encoder-decoder architecture only allows sparse connections between encoder and decoder positions, preventing information flow from subject to verb"
+                ],
+                "correct_answer": "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+                "explanation": "The lecture explicitly states that RNNs take 'O(sequence length) steps for distant word pairs to interact' and identifies this as a problem because it is 'Hard to learn long-distance dependencies (because gradient problems!)'. The information from 'chef' must go through O(sequence length) many layers to reach the position of the verb, causing gradient vanishing/exploding issues. In contrast, Transformers have O(1) maximum interaction distance because 'each word interacts with each other' directly through self-attention.",
+                "source_chunk_ids": [
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+                  "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+                ]
+              }
+            ],
+            "quarantined_questions": []
+          }
+        }
+      ],
+      "delivered_questions": [
+        {
+          "reasoning_scratchpad": "Step 1: Analyze the chunks to identify core concepts. The chunks discuss Transformer architecture motivations (computational complexity, path length, parallelizability), self-attention mechanisms, and comparisons with RNNs.\n\nStep 2: Focus on the three desirata from Chunk 1 (p17-20): (1) Minimize computational complexity per layer, (2) Minimize path length between word pairs (O(1) for Transformers vs O(sequence length) for RNNs), (3) Maximize parallelizability.\n\nStep 3: Chunk 2 (p22-24) explains self-attention and compares computational dependencies. Key points: Transformers have O(1) maximum interaction distance and unparallelizable operations don't increase with sequence length.\n\nStep 4: Chunk 3 (p60) mentions quadratic self-attention cost O(T\u00b2) and modifications like BigBird.\n\nStep 5: Create a scenario-based question testing understanding of why Transformers were designed to overcome RNN limitations. The question should require applying knowledge of computational complexity and interaction distance to analyze a hypothetical architecture choice.\n\nStep 6: Design a scenario where an engineer must choose between architectures based on specific requirements about long-range dependencies and computational efficiency. The correct answer should demonstrate understanding that Transformers provide O(1) interaction distance while RNNs have O(sequence length).",
+          "question_text": "A research team is designing a neural architecture for processing long legal documents where understanding relationships between clauses separated by thousands of words is critical. They are evaluating two approaches: (1) A bidirectional LSTM-based encoder with attention, and (2) A standard Transformer encoder. The team specifically notes that their documents have sequence length n = 10,000 and representation dimension d = 512. Based on the Transformer design motivations and computational properties discussed in the lecture, which statement accurately contrasts these two architectures for this specific use case?",
+          "options": [
+            "The Transformer is disadvantageous because its self-attention complexity per layer is O(n\u00b2d), which exceeds the RNN's O(nd\u00b2) complexity when n > d, making the RNN more computationally efficient for this document length.",
+            "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+            "The Transformer and RNN offer equivalent capabilities for long-range dependencies since both use attention mechanisms; the primary difference is that Transformers can only process sequences bidirectionally while RNNs process them unidirectionally.",
+            "The Transformer is unsuitable for this task because self-attention eliminates all sequential inductive bias, meaning the model cannot leverage the inherent ordering of words in legal documents unlike the RNN which naturally encodes linear locality."
+          ],
+          "correct_answer": "The Transformer provides a significant advantage for learning long-range dependencies because the maximum interaction distance between any two words is O(1), whereas the RNN requires O(sequence length) sequential operations for distant word pairs to interact.",
+          "explanation": "According to the lecture, one of the three key motivations for the Transformer architecture was minimizing the path length between any pair of words to facilitate learning of long-range dependencies. The lecture explicitly states that RNNs take O(sequence length) steps for distant word pairs to interact, creating gradient problems for long-distance dependencies. In contrast, Transformers have O(1) maximum interaction distance since 'each word interacts with each other' directly through self-attention. While it's true that Transformer self-attention has O(n\u00b2) complexity (mentioned in the context of BigBird addressing this), the key advantage for long-range dependencies is the O(1) interaction distance, making option B the correct characterization of this trade-off.",
+          "source_chunk_ids": [
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+          ]
+        },
+        {
+          "reasoning_scratchpad": "Step 1: Analyze the request. I need to create a highly difficult troubleshooting/diagnostic question based on the provided lecture chunks about Transformers.\n\nStep 2: Review the source material. The chunks cover:\n- Motivation for Transformers vs RNNs (complexity, path length, parallelizability)\n- Computational complexity comparison (RNN: O(n) sequential, Transformer: O(1) sequential but O(n^2) self-attention)\n- Self-attention mechanism\n- BigBird modification for reducing quadratic cost\n- Finding that most Transformer modifications don't meaningfully improve performance\n\nStep 3: Identify a diagnostic scenario. A good scenario would involve a researcher or engineer observing unexpected behavior when trying to 'improve' a Transformer model or comparing it to an RNN baseline.\n\nStep 4: Draft the scenario. A researcher is comparing an RNN-based model to a Transformer on a very long sequence task. They observe that while the Transformer trains faster on short sequences, it runs out of memory on long sequences, whereas the RNN (while slower) can process them. They attempt to fix this by implementing a modification (like BigBird-style sparse attention) expecting significant performance gains, but find the results disappointing.\n\nStep 5: Formulate the question. The question should ask for the ROOT CAUSE of why their modification didn't yield the expected improvement.\n\nStep 6: Develop options based on the text:\n- Option A: The modification increased computational complexity (incorrect - BigBird reduces it)\n- Option B: The modification increased the path length between words (partially true but not the main point)\n- Option C: Most Transformer modifications do not meaningfully improve performance (correct - directly from chunk 61)\n- Option D: The modification prevented parallelization (incorrect)\n\nStep 7: Refine for difficulty. Make the scenario more specific and the distractors more plausible based on the technical details in the lecture.",
+          "question_text": "A research team is developing a model for processing long legal documents. They initially implement a standard Transformer, but encounter out-of-memory errors due to the quadratic self-attention cost with long sequences. To address this, they replace the all-pairs self-attention with a BigBird-style mechanism (using local windows, random interactions, and global tokens). Based on the lecture findings, what is the most likely outcome of this modification?",
+          "options": [
+            "The modification will significantly improve performance because it reduces the O(n\u00b2) complexity while maintaining the O(1) maximum interaction distance.",
+            "The modification will fail to train because removing all-pairs attention eliminates the ability for words to attend to each other.",
+            "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+            "The modification will degrade performance proportionally to the reduction in random interactions, as these are the most critical component for learning long-range dependencies."
+          ],
+          "correct_answer": "The modification will not meaningfully improve performance, as empirical studies show most Transformer architectural modifications do not yield significant gains.",
+          "explanation": "According to the lecture slides discussing 'Do Transformer Modifications Transfer?', the key finding states: 'Surprisingly, we find that most modifications do not meaningfully improve performance.' While BigBird and similar approaches address the quadratic self-attention cost, the empirical evidence suggests that architectural modifications to Transformers often do not provide the performance improvements researchers expect, even if they successfully reduce computational complexity.",
+          "source_chunk_ids": [
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p60_4aa634",
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+          ]
+        },
+        {
+          "reasoning_scratchpad": "I need to create a difficult question comparing and contrasting RNNs and Transformers based on the provided chunks. Let me analyze the key differences presented:\n\n1. Computational Complexity (Chunk 1, p.17-18):\n- When n << d, Transformers have lower complexity per layer\n- Table 1 mentioned but details not fully shown\n\n2. Path Length/Interaction Distance (Chunk 1, p.18-20):\n- RNNs: O(sequence length) steps for distant word pairs to interact\n- Transformers: O(1) maximum interaction distance\n- RNNs have linear locality baked in, which is useful for nearby words but problematic for long-range dependencies\n\n3. Parallelizability (Chunk 1, p.21, Chunk 2, p.23-24):\n- RNNs: O(sequence length) unparallelizable operations in forward/backward passes\n- Transformers: Number of unparallelizable operations does NOT increase with sequence length\n\n4. Self-Attention vs Recurrence (Chunk 2, p.22-24):\n- Self-attention allows each word to attend to every other word\n- RNNs process sequentially left-to-right\n\n5. Trade-offs mentioned (Chunk 3, p.60):\n- Transformers have O(T\u00b2) all-pairs self-attention cost\n- BigBird and other variants try to address this quadratic cost\n\nThe question should test understanding of these core trade-offs. A good question would ask students to identify the correct comparison between computational dependencies, parallelization, or interaction distances.",
+          "question_text": "Compare and contrast the computational dependencies of RNN-based models versus Transformer-based models. Which of the following accurately describes the trade-offs between these two architectures regarding parallelizability and interaction distance?",
+          "options": [
+            "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have O(1) unparallelizable operations and O(1) maximum interaction distance between any word pair.",
+            "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+            "Both RNNs and Transformers have O(sequence length) unparallelizable operations, but Transformers achieve O(1) maximum interaction distance through self-attention while RNNs require O(sequence length) steps for distant word pairs to interact.",
+            "RNNs have O(1) unparallelizable operations due to their sequential nature, whereas Transformers have O(sequence length) unparallelizable operations but compensate with O(1) maximum interaction distance through all-pairs self-attention."
+          ],
+          "correct_answer": "RNNs have O(sequence length) unparallelizable operations and O(sequence length) maximum interaction distance, whereas Transformers have a number of unparallelizable operations that does not increase with sequence length and O(1) maximum interaction distance between any word pair.",
+          "explanation": "According to the lecture slides, RNNs have O(sequence length) unparallelizable operations in forward and backward passes due to their sequential 'left-to-right' processing, and distant word pairs require O(sequence length) steps to interact. In contrast, Transformers have a number of unparallelizable operations that does NOT increase with sequence length (enabling greater parallelization on GPUs), and since each word attends to every other word through self-attention, the maximum interaction distance is O(1). This is explicitly stated in the 'Computational Dependencies for Recurrence vs. Attention' comparison slides.",
+          "source_chunk_ids": [
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+          ]
+        },
+        {
+          "reasoning_scratchpad": "I need to create a troubleshooting/diagnostic question based on the provided chunks. The chunks discuss the Transformer architecture, its motivations, and advantages over RNNs. Key concepts include:\n\n1. Self-attention mechanism where each word attends to all other words\n2. Transformer advantages: O(1) maximum interaction distance, parallelizable operations\n3. RNN disadvantages: O(sequence length) steps for distant word pairs to interact, O(seq length) unparallelizable operations\n4. Computational complexity: When n << d, Transformer complexity per layer is lower\n5. The quadratic cost of self-attention O(T\u00b2) and attempts to improve it (like BigBird)\n\nFor a troubleshooting question, I should present a scenario where a model is failing or acting unexpectedly and ask the student to identify the root cause. A good scenario would be contrasting RNN vs Transformer behavior on long-range dependencies.\n\nQuestion idea: A researcher is training two models (RNN-based and Transformer-based) on a task requiring long-range dependency learning. The RNN model struggles to learn dependencies between distant words while the Transformer succeeds. Ask why this happens based on the 'linear interaction distance' concept.\n\nLet me make this more diagnostic: Present a scenario where an RNN-based model is failing to capture long-range dependencies in a specific sentence, and ask the student to identify the root cause based on the computational properties discussed in the lecture.",
+          "question_text": "A researcher is debugging a language model that uses a bidirectional LSTM encoder with attention for a machine translation task. The model performs well on short sentences but consistently fails to correctly translate sentences with long-range subject-verb dependencies, such as 'The chef who prepared the elaborate seven-course meal for the distinguished guests ___ the compliments gracefully' (where 'chef' must agree with 'accepted'). Gradient analysis shows that the signal from the loss at the verb position diminishes significantly before reaching the subject position's representation. Based on the lecture's comparison of computational dependencies between RNNs and Transformers, what is the root cause of this failure?",
+          "options": [
+            "The attention mechanism adds O(n\u00b2) computational complexity per layer, causing gradient explosion when sequence length increases",
+            "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+            "The bidirectional LSTM encoder cannot parallelize its forward pass, limiting the model's ability to process long sequences efficiently during training",
+            "The attention mechanism in the encoder-decoder architecture only allows sparse connections between encoder and decoder positions, preventing information flow from subject to verb"
+          ],
+          "correct_answer": "The model requires O(sequence length) sequential operations for information to propagate between distant word pairs, making it difficult to learn long-range dependencies due to gradient problems",
+          "explanation": "The lecture explicitly states that RNNs take 'O(sequence length) steps for distant word pairs to interact' and identifies this as a problem because it is 'Hard to learn long-distance dependencies (because gradient problems!)'. The information from 'chef' must go through O(sequence length) many layers to reach the position of the verb, causing gradient vanishing/exploding issues. In contrast, Transformers have O(1) maximum interaction distance because 'each word interacts with each other' directly through self-attention.",
+          "source_chunk_ids": [
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p1_2ed1de",
+            "CS224_cs224n-spr2024-lecture08-transformers.pdf_p22_d39dc2"
+          ]
+        }
+      ],
+      "quarantined_questions": [],
+      "metrics": {
+        "requested": 4,
+        "delivered": 4,
+        "quarantined": 0,
+        "silently_missing": 0,
+        "errored": false,
+        "error_reason": null,
+        "question_numbers": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "attempts": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "first_attempt_approval_rate": 1.0,
+        "mean_attempts": 1.0,
+        "validity": [
+          {
+            "index": 0,
+            "valid": true,
+            "failures": []
+          },
+          {
+            "index": 1,
+            "valid": true,
+            "failures": []
+          },
+          {
+            "index": 2,
+            "valid": true,
+            "failures": []
+          },
+          {
+            "index": 3,
+            "valid": true,
+            "failures": []
+          }
+        ],
+        "valid_rate": 1.0,
+        "answer_positions": [
+          1,
+          2,
+          1,
+          1
+        ],
+        "duplicate_pairs": [],
+        "duplicate_rate": 0.0,
+        "distinct_files_cited": 1,
+        "distinct_chunks_cited": 3,
+        "files_cited": [
+          "cs224n-spr2024-lecture08-transformers.pdf"
+        ],
+        "total_seconds": 54.924,
+        "seconds_to_first_approved": 19.492,
+        "usage": null
+      },
+      "judge": [
+        {
+          "result": {
+            "answer_supported_by_sources": true,
+            "single_correct_answer": false,
+            "distractors_plausible": true,
+            "requires_course_material": false,
+            "difficulty": "medium",
+            "notes": "The marked answer is supported by the slides (RNN O(sequence length) steps vs. Transformer O(1) max interaction distance), but option 0 is also arguably correct: with n=10,000 > d=512, the per-layer self-attention cost O(n\u00b2d) does exceed the RNN's O(nd\u00b2), which the lecture's Table 1 comparison implies, so two options are defensible."
+          },
+          "reason": null
+        },
+        {
+          "result": {
+            "answer_supported_by_sources": true,
+            "single_correct_answer": true,
+            "distractors_plausible": true,
+            "requires_course_material": true,
+            "difficulty": "medium",
+            "notes": "The marked answer rests on the slide's general finding that 'most modifications do not meaningfully improve performance' (Narang et al.), which the slide does not explicitly apply to BigBird, so the question is sound but relies on a generalization; the other options contradict the lecture or are clearly wrong."
+          },
+          "reason": null
+        },
+        {
+          "result": {
+            "answer_supported_by_sources": true,
+            "single_correct_answer": true,
+            "distractors_plausible": true,
+            "requires_course_material": true,
+            "difficulty": "medium",
+            "notes": "The marked answer matches the slide 24 Transformer advantages (unparallelizable operations do not increase with sequence length, max interaction distance O(1)) and the RNN O(sequence length) claims on slides 19 and 21, while distractors 0, 2, and 3 each contain a clear mismatch with the source."
+          },
+          "reason": null
+        },
+        {
+          "result": {
+            "answer_supported_by_sources": true,
+            "single_correct_answer": true,
+            "distractors_plausible": true,
+            "requires_course_material": true,
+            "difficulty": "medium",
+            "notes": "The marked answer matches the lecture's point that RNNs need O(sequence length) steps for distant word pairs to interact, causing hard-to-learn long-distance dependencies; distractors are plausible though option 0 and 3 are somewhat off-source, and the question requires applying the lecture's framing to a new scenario."
+          },
+          "reason": null
+        }
+      ],
+      "judge_summary": {
+        "n_judged": 4,
+        "n_null": 0,
+        "answer_supported_by_sources_rate": 1.0,
+        "single_correct_answer_rate": 0.75,
+        "distractors_plausible_rate": 1.0,
+        "requires_course_material_rate": 0.75,
+        "difficulty": {
+          "easy": 0,
+          "medium": 4,
+          "hard": 0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "n_cases": 1,
+    "requested": 4,
+    "delivered": 4,
+    "quarantined": 0,
+    "silently_missing": 0,
+    "errored_cases": 0,
+    "first_attempt_approval_rate": 1.0,
+    "mean_attempts": 1.0,
+    "valid_rate": 1.0,
+    "duplicate_rate": 0.0,
+    "answer_position_histogram": {
+      "0": 0,
+      "1": 3,
+      "2": 1,
+      "3": 0
+    },
+    "mean_distinct_files_cited": 1.0,
+    "mean_total_seconds": 54.924,
+    "judge_n_judged": 4,
+    "judge_n_null": 0,
+    "usage": null,
+    "judge_answer_supported_by_sources_rate": 1.0,
+    "judge_single_correct_answer_rate": 0.75,
+    "judge_distractors_plausible_rate": 1.0,
+    "judge_requires_course_material_rate": 0.75,
+    "judge_difficulty_easy": 0,
+    "judge_difficulty_medium": 4,
+    "judge_difficulty_hard": 0
+  }
+}
