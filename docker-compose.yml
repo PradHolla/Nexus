@@ -7,7 +7,6 @@ services:
       - "6334:6334"
     volumes:
       - ./qdrant_storage:/qdrant/storage
-      - ./jobs.db:/app/jobs.db
 
   backend:
     build:

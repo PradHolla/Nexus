@@ -1,16 +1,18 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
-
-# Virtual environments
 .venv
-ai-engineer.md
-
 *.ipynb
+
+# Node / frontend build
+node_modules
+dist
+dist-ssr
+*.local
 
 # Logs
 logs
@@ -21,12 +23,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
+# Editor / OS
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -36,9 +33,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code personal settings
+.claude/settings.local.json
+
+# Secrets
 .env
+
+# Private material (assignment brief, course corpus)
+ai-engineer.md
 nlp_stanford/
 
-# Application Data
-jobs.db
+# Application data
+jobs.db*
 qdrant_storage/
+data/qdrant-snapshots/

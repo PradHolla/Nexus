@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+.claude
+**/__pycache__
+**/.DS_Store
+*.ipynb
+frontend/
+docs/
+data/
+tests/
+scripts/
+nlp_stanford/
+qdrant_storage/
+jobs.db*

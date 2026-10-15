@@ -1,7 +1,7 @@
 import os
 import json
 import re
-import fitz  # PyMuPDF
+import pymupdf
 import pymupdf4llm
 import boto3
 from typing import List, Dict, Any
@@ -101,7 +101,7 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
         print(msg)
     
     doc_chunks = pymupdf4llm.to_markdown(file_path, page_chunks=True)
-    doc_pdf = fitz.open(file_path) 
+    doc_pdf = pymupdf.open(file_path) 
     
     chunks = []
     vision_tasks = [] 
@@ -211,7 +211,7 @@ def parse_pdf(file_path: str, filename: str, course_id: str, lecture_number: int
     return chunks
 
 if __name__ == "__main__":
-    sample_pdf_path = "1-introduction.pdf"
+    sample_pdf_path = "data/samples/1-introduction.pdf"
     if os.path.exists(sample_pdf_path):
         print(f"Extracting chunks from {sample_pdf_path}...\n")
         extracted_chunks = parse_pdf(sample_pdf_path, "1-introduction.pdf", "CS584", lecture_number=1)
