@@ -13,6 +13,7 @@ bedrock_client = boto3.client('bedrock-runtime', region_name=os.getenv("AWS_REGI
 VISION_MODEL_ID = "moonshotai.kimi-k2.5"
 
 CHARACTER_THRESHOLD = 300 
+VISION_MAX_WORKERS = max(1, int(os.getenv("INGEST_VISION_WORKERS", "3")))
 
 ADMIN_KEYWORDS = ["office hours", "grading policy", "zoom link", "late submission", "prerequisites", "textbooks", "ta information", "course work", "course overview"]
 
@@ -217,7 +218,8 @@ def parse_ppt(file_path: str, filename: str, course_id: str, lecture_number: int
 
     # 4. Batch Process Vision
     if vision_tasks:
-        msg = f"Concurrently processing {len(vision_tasks)} vision fallbacks via Kimi 2.5..."
+        vision_worker_count = min(VISION_MAX_WORKERS, len(vision_tasks))
+        msg = f"Concurrently processing {len(vision_tasks)} vision fallbacks via Kimi 2.5 with {vision_worker_count} workers..."
         if job_id:
             append_job_log(job_id, msg)
         else:
@@ -227,7 +229,7 @@ def parse_ppt(file_path: str, filename: str, course_id: str, lecture_number: int
             result = analyze_diagram_with_kimi(task["image_bytes"], task["ext"], job_id=job_id)
             return task, result
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=vision_worker_count) as executor:
             futures = [executor.submit(_fetch_vision, task) for task in vision_tasks]
             
             for future in concurrent.futures.as_completed(futures):

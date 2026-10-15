@@ -24,6 +24,18 @@ from src.quiz.generator import run_planner_agent, generate_validated_quiz
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import QdrantClient
 
+
+def _get_env_int(name: str, default: int, minimum: int = 1) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return max(minimum, default)
+
+    try:
+        return max(minimum, int(raw_value))
+    except ValueError:
+        return max(minimum, default)
+
+
 # Pull from env so Docker can route to the 'qdrant' container, fallback to localhost for uv runs
 qdrant_host = os.getenv("QDRANT_HOST", "localhost")
 qdrant_port = os.getenv("QDRANT_PORT", "6333")
@@ -31,8 +43,10 @@ qdrant_client = QdrantClient(f"http://{qdrant_host}:{qdrant_port}")
 sampler = QuizSampler(qdrant_client)
 
 # --- GLOBAL EXECUTOR ---
-# Reusing the process pool is more efficient than creating one per request.
-process_pool = concurrent.futures.ProcessPoolExecutor()
+# Reusing the process pool is more efficient than creating one per request,
+# but the default worker count is too aggressive for local Docker memory.
+parse_worker_count = _get_env_int("INGEST_PARSE_WORKERS", 2)
+process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=parse_worker_count)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,10 +81,14 @@ def _cpu_bound_parse(file_path: str, filename: str, course_id: str, job_id: str 
 
 async def batch_ingest_task(jobs: list):
     loop = asyncio.get_running_loop()
+    parse_concurrency = min(parse_worker_count, max(1, len(jobs)))
 
     for job in jobs:
         upsert_job_status(job["job_id"], "processing")
-        append_job_log(job["job_id"], f"Starting parallel CPU parsing for {len(jobs)} files...")
+        append_job_log(
+            job["job_id"],
+            f"Starting CPU parsing for {len(jobs)} files with up to {parse_concurrency} worker processes.",
+        )
 
     tasks = [
         loop.run_in_executor(
@@ -187,6 +205,9 @@ class QuizRequest(BaseModel):
     user_prompt: str  
     keywords: Optional[List[str]] = None
     file_filters: Optional[List[str]] = None 
+    retrieval_mode: str = "hybrid"
+    max_context_chunks: Optional[int] = None
+    include_retrieval_diagnostics: bool = False
 
 
 def _sse_event(event_type: str, data: dict) -> str:
@@ -219,6 +240,9 @@ async def create_quiz(request: QuizRequest):
                 num_questions=request.num_questions,
                 file_filters=request.file_filters,
                 vector_queries=plan.vector_queries,
+                retrieval_mode=request.retrieval_mode,
+                max_context_chunks=request.max_context_chunks,
+                include_retrieval_diagnostics=request.include_retrieval_diagnostics,
             ):
                 if isinstance(event, str):
                     yield event

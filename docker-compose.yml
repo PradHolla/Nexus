@@ -21,6 +21,10 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - PYTHONUNBUFFERED=1
+      - HF_TOKEN=${HF_TOKEN:-}
+      - INGEST_PARSE_WORKERS=${INGEST_PARSE_WORKERS:-2}
+      - INGEST_VISION_WORKERS=${INGEST_VISION_WORKERS:-3}
+      - PDF_RENDER_DPI=${PDF_RENDER_DPI:-110}
       # Local default is 3000, can be overridden in prod via .env
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
