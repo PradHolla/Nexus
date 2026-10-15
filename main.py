@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+
+# Load .env before importing modules that create API clients at import time
+load_dotenv()
+
 import re
 import uuid
 import json
