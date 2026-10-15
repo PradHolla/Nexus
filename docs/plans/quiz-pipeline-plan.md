@@ -1,5 +1,7 @@
 # Quiz Pipeline Redesign — Plan
 
+> **Order changed (2026-10-15):** the ingestion rework (`ingestion-plan.md`) runs first and re-ingests once; this plan follows on the final data. The Haiku client (Phase 1 below) is built during ingestion step 1.
+
 Scope: quiz generation only. Switch the LLM calls to Claude Haiku 5.5, rebuild the pipeline as a LangGraph graph, and fix the quality problems in the design itself. Ingestion fixes and the re-ingest come later.
 
 Verified facts this plan relies on (checked 2026-10-15):
@@ -122,19 +124,5 @@ Add it only if the eval shows bad questions the critic misses. Two extra Haiku c
 - The solver check waits until after the eval.
 - Out of scope for now: ingestion (Kimi vision and Titan stay on Bedrock), `scripts/evaluate_rag.py`, the AI Tutor, checkpointing.
 
-## Later — Ingestion phase (after the quiz pipeline)
-Measured in the current data (2026-10-15): 360 chunks over 25 files; at least 10% of chunks sit exactly at the 8,000-character cap; some lectures have only 2–3 chunks; 22 of 25 files are tagged lecture 224; 0 chunks flagged as administrative.
-
-1. **Chunking rewrite (PDF):** start from pages; group consecutive pages up to a size target, still splitting at headers; split pages that are too long at paragraph, then sentence boundaries, with a small overlap; merge tiny pages into a neighbour; never truncate. Each chunk keeps its page range. Size targets get tuned with the eval. The current 8,000-char truncation (`src/ingestion/embedder.py`) discards text, and it isn't even needed: Titan v2 accepts 8,192 tokens / 50,000 characters.
-2. **Stable chunk IDs** (file + page range + index) so re-uploads replace instead of duplicate.
-3. **Lecture number** parsed from a `lecture\d+`-style pattern, not the first number in the filename.
-4. **Embedding failures** raise and retry instead of silently dropping chunks.
-5. **Vision failure text** is no longer injected into chunk text.
-6. **Admin detection** via an LLM classifier instead of keyword matching.
-7. Move vision to Haiku 5.5.
-8. **Wipe and re-ingest:** delete the existing `Nexus_course_materials` collection (it also contains stray files from other courses: `02-ProgrammingInKarel.ppt`, `lecture_07_pos.pptx`, `5-more-rnn.pdf`, `7-seq2seq.pdf`), recreate it in hybrid format (named dense + sparse), and ingest only the 22 PDFs in `nlp_stanford/` as course `CS224`. Before ingesting, decide:
-   - `lecture14-agents-shikhar.pdf` and `lecture14-agents-shikhar-updated.pdf` are two versions of the same lecture. Keep only the updated one, or it will produce near-duplicate chunks.
-   - Two different files are lecture 18 (`2024-lecture18-deployment-and-efficiency`, `spr2024-lecture18-nlp-linguistics-philosophy`), so lecture number alone can't identify a file.
-   - `lecture13-speech-bci.pdf` is 65 MB, which matters for parse time, and for native PDF input if we ever use it (32 MB API limit).
-
-Three eval points: baseline (old pipeline, old data) → new pipeline on old data → new pipeline on re-ingested data.
+## Ingestion
+Moved to `ingestion-plan.md`, which now runs before this plan.
