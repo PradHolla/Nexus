@@ -95,7 +95,7 @@ START → extract ──Send per visual page──▶ describe_page ─┐
   - otherwise → `failed: interrupted`.
 - **Event loop:** ingestion no longer blocks the server, because blocking calls run in threads or the process pool.
 - **New endpoint:** `GET /api/courses/{course_id}/documents` lists the lecture summaries.
-- **PowerPoint:** `.ppt`/`.pptx` are **converted to PDF via LibreOffice** and go through the same graph, giving one pipeline with page renders for vision. Locally this needs `brew install --cask libreoffice`. The corpus is all PDFs, so this doesn't block the re-ingest. The old python-pptx path is removed.
+- **PowerPoint: dropped for now** (user decision, 2026-10-15). Ingestion accepts PDF only; `POST /api/ingest` rejects `.ppt`/`.pptx` with a 400 and the frontend dropzone accepts PDF only. The python-pptx path and LibreOffice conversion are removed. It can be added back later by converting to PDF in front of the same graph.
 - **Old code removed:** `parse_pdf`/`parse_ppt`, the Kimi vision calls and the old embedder flow are replaced. The quiz side's `get_titan_embedding` stays, now raising on errors.
 
 ## Steps
