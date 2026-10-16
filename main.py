@@ -7,6 +7,7 @@ import re
 import uuid
 import json
 import os
+from pathlib import Path
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import concurrent.futures
 from fastapi.responses import StreamingResponse
+from src.config import UPLOADS_DIR, ensure_var_dirs
 from src.ingestion.embedder import process_and_ingest_document
 from src.ingestion.ppt_parser import parse_ppt
 from src.ingestion.pdf_parser import parse_pdf
@@ -55,6 +57,7 @@ process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=parse_worker_c
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_var_dirs()
     init_db()
     print("Starting Nexus Backend...")
     yield
@@ -167,7 +170,7 @@ async def ingest_documents(
             raise HTTPException(status_code=400, detail="Unsupported file type")
             
         job_id = str(uuid.uuid4())
-        temp_file_path = f"/tmp/{job_id}_{file.filename}" 
+        temp_file_path = str(UPLOADS_DIR / f"{job_id}_{Path(file.filename).name}")
         
         with open(temp_file_path, "wb") as buffer:
             content = await file.read()

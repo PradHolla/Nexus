@@ -13,3 +13,4 @@ scripts/
 nlp_stanford/
 qdrant_storage/
 jobs.db*
+var/

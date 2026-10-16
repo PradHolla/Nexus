@@ -10,11 +10,11 @@ Nexus: RAG quiz generator (FastAPI + SSE backend, Qdrant, React/Vite frontend). 
 
 ## Environment
 
-- Python via `uv` (`uv sync`, `uv run ...`). Run API: `uv run uvicorn main:app --port 8000 --reload`. Qdrant: `docker run -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant`.
+- Python via `uv` (`uv sync`, `uv run ...`). Run API: `uv run uvicorn main:app --port 8000 --reload`. Qdrant: `docker compose up -d qdrant`. Runtime state (jobs/checkpoint DBs, caches, uploads) lives in `var/` (gitignored).
 - LLM: Claude Haiku 5.5 (`claude-haiku-5-5`) via the `anthropic` SDK; `ANTHROPIC_API_KEY` is in `.env`.
 - Embeddings: Titan v2 on Bedrock (staying). AWS credentials come from the user's AWS profile, not `.env`.
 - Never print or commit `.env` contents.
 
 ## Current focus
 
-Quiz generation pipeline redesign first (Haiku 5.5 switch + LangGraph orchestration). Ingestion fixes and re-ingest come after.
+Ingestion rework first (`docs/plans/ingestion-plan.md`), then one wipe + re-ingest of `nlp_stanford/`, then the quiz pipeline redesign (`docs/plans/quiz-pipeline-plan.md`). PDF only for now — PowerPoint support is dropped. Commit and push straight to `main`; no branches.

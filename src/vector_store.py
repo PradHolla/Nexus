@@ -4,8 +4,10 @@ from typing import Any
 
 from qdrant_client.http import models
 
+from src.config import CHUNKS_COLLECTION
 
-DEFAULT_COLLECTION_NAME = "Nexus_course_materials"
+
+DEFAULT_COLLECTION_NAME = CHUNKS_COLLECTION
 DENSE_VECTOR_NAME = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
 SPARSE_VECTOR_NAME = os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse")
 SPARSE_MODEL_NAME = os.getenv("QDRANT_SPARSE_MODEL", "Qdrant/bm25")

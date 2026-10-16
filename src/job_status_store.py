@@ -1,9 +1,10 @@
 import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Generator, Optional, Tuple
 
-DB_PATH = Path(__file__).resolve().parents[1] / "jobs.db"
+from src.config import JOBS_DB_PATH
+
+DB_PATH = JOBS_DB_PATH
 
 
 @contextmanager

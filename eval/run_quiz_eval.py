@@ -6,6 +6,7 @@ Compare:  uv run python eval/run_quiz_eval.py --compare a.json b.json
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
 import time
@@ -27,7 +28,7 @@ ROOT = EVAL_DIR.parent
 CASES_PATH = EVAL_DIR / "quiz_cases.json"
 RESULTS_DIR = EVAL_DIR / "results"
 
-COLLECTION = "Nexus_course_materials"
+COLLECTION = os.getenv("QDRANT_CHUNKS_COLLECTION", "Nexus_course_materials")
 TITAN_MODEL_ID = "amazon.titan-embed-text-v2:0"
 JUDGE_MODEL = "claude-haiku-5-5"
 JUDGE_CONCURRENCY = 5
