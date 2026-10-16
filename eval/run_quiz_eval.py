@@ -2,6 +2,7 @@
 
 Run:      uv run python eval/run_quiz_eval.py --label <name> [--cases id1,id2] [--no-judge]
 Compare:  uv run python eval/run_quiz_eval.py --compare a.json b.json
+Rescore:  uv run python eval/run_quiz_eval.py --rescore results.json [--dup-threshold 0.75]
 """
 import argparse
 import json
@@ -32,6 +33,7 @@ COLLECTION = os.getenv("QDRANT_CHUNKS_COLLECTION", "Nexus_course_materials")
 TITAN_MODEL_ID = "amazon.titan-embed-text-v2:0"
 JUDGE_MODEL = "claude-haiku-5-5"
 JUDGE_CONCURRENCY = 5
+DUP_METHOD = "titan>=threshold + haiku confirm"
 DIFFICULTIES = ["easy", "medium", "hard"]
 JUDGE_BOOLS = [
     "answer_supported_by_sources",
@@ -162,7 +164,7 @@ def check_question(q, chunks, course_id, file_filters):
 
 
 # ---------------------------------------------------------------------------
-# Duplicates (Titan embeddings)
+# Duplicates (Titan embedding candidates, confirmed by Haiku)
 # ---------------------------------------------------------------------------
 
 def titan_embed(bedrock, text):
@@ -180,7 +182,8 @@ def cosine(a, b):
     return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
 
 
-def find_duplicates(bedrock, texts, threshold):
+def find_candidates(bedrock, questions, threshold):
+    texts = ["\n".join([q.get("question_text", ""), *(q.get("options") or [])]) for q in questions]
     embeddings = [titan_embed(bedrock, t) for t in texts]
     pairs = []
     for i in range(len(texts)):
@@ -189,6 +192,75 @@ def find_duplicates(bedrock, texts, threshold):
             if sim >= threshold:
                 pairs.append({"i": i, "j": j, "similarity": round(sim, 4)})
     return pairs
+
+
+class DupVerdict(BaseModel):
+    duplicate: bool
+    reason: str
+
+
+DUP_SYSTEM = (
+    "You compare two multiple-choice quiz questions from the same quiz. "
+    "Answer duplicate=true if they test the same piece of knowledge, so a student who can answer one can answer "
+    "the other without learning anything new, even when the wording, framing or options differ. "
+    "Answer duplicate=false if they test different facts, concepts or skills, even when they are on the same topic. "
+    "reason: one sentence."
+)
+
+
+def confirm_duplicate(client, qa, qb):
+    """Return (duplicate_bool_or_None, reason)."""
+    def render(label, q):
+        options = "\n".join(f"{i}. {o}" for i, o in enumerate(q.get("options") or []))
+        return (f"Question {label}: {q.get('question_text')}\nOptions:\n{options}\n"
+                f"Marked correct answer: {q.get('correct_answer')}")
+    content = render("A", qa) + "\n\n" + render("B", qb)
+    try:
+        resp = client.messages.parse(
+            model=JUDGE_MODEL,
+            max_tokens=1000,
+            system=DUP_SYSTEM,
+            messages=[{"role": "user", "content": content}],
+            output_format=DupVerdict,
+            output_config={"effort": "low"},
+        )
+    except anthropic.APIError as e:
+        print(f"  duplicate verdict API error: {type(e).__name__}: {e}", file=sys.stderr)
+        return None, f"api error: {type(e).__name__}: {e}"
+    if resp.stop_reason == "refusal":
+        return None, "refusal"
+    if resp.parsed_output is None:
+        return None, f"no parsed output (stop_reason={resp.stop_reason})"
+    return resp.parsed_output.duplicate, resp.parsed_output.reason
+
+
+def detect_duplicates(bedrock, anthropic_client, questions, threshold):
+    """Return (candidates, confirmed_pairs, error). error is set if Titan failed or any verdict is None."""
+    try:
+        raw = find_candidates(bedrock, questions, threshold)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+        print(f"  duplicate check failed: {error}", file=sys.stderr)
+        return [], [], error
+
+    def verdict(pair):
+        dup, reason = confirm_duplicate(anthropic_client, questions[pair["i"]], questions[pair["j"]])
+        return {**pair, "duplicate": dup, "reason": reason}
+    with ThreadPoolExecutor(max_workers=JUDGE_CONCURRENCY) as pool:
+        candidates = list(pool.map(verdict, raw))
+
+    pairs = [
+        {"i": c["i"], "j": c["j"], "similarity": c["similarity"], "reason": c["reason"]}
+        for c in candidates if c["duplicate"] is True
+    ]
+    n_null = sum(c["duplicate"] is None for c in candidates)
+    error = f"{n_null} of {len(candidates)} duplicate verdicts unavailable" if n_null else None
+    return candidates, pairs, error
+
+
+def duplicate_rate(pairs, delivered, error):
+    in_dup = {p["i"] for p in pairs} | {p["j"] for p in pairs}
+    return len(in_dup) / delivered if delivered and error is None else None
 
 
 # ---------------------------------------------------------------------------
@@ -308,14 +380,8 @@ def run_case(case, args, qdrant, bedrock, anthropic_client):
     # Coverage
     files_cited = sorted({chunks[c]["file_name"] for c in set(all_ids) if c in chunks})
 
-    # Duplicates (a Titan failure is recorded on the case, not fatal to the run)
-    dup_error = None
-    try:
-        dup_pairs = find_duplicates(bedrock, [q.get("question_text", "") for q in delivered_qs], args.dup_threshold)
-    except Exception as e:
-        dup_pairs, dup_error = [], f"{type(e).__name__}: {e}"
-        print(f"  duplicate check failed: {dup_error}", file=sys.stderr)
-    in_dup = {p["i"] for p in dup_pairs} | {p["j"] for p in dup_pairs}
+    # Duplicates (a Titan or verdict failure is recorded on the case, not fatal to the run)
+    dup_candidates, dup_pairs, dup_error = detect_duplicates(bedrock, anthropic_client, delivered_qs, args.dup_threshold)
 
     first_approved = next((e["t"] for e in events if e["event"] == "approved"), None)
     metrics = {
@@ -335,8 +401,9 @@ def run_case(case, args, qdrant, bedrock, anthropic_client):
             q["options"].index(q["correct_answer"]) if q.get("correct_answer") in (q.get("options") or []) else None
             for q in delivered_qs
         ],
+        "duplicate_candidates": dup_candidates,
         "duplicate_pairs": dup_pairs,
-        "duplicate_rate": len(in_dup) / delivered if delivered and dup_error is None else None,
+        "duplicate_rate": duplicate_rate(dup_pairs, delivered, dup_error),
         "duplicate_error": dup_error,
         "distinct_files_cited": len(files_cited),
         "distinct_chunks_cited": len(set(all_ids)),
@@ -469,7 +536,7 @@ def run_mode(args):
 
     qdrant = QdrantClient(host="localhost", port=6333, check_compatibility=False)
     bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
-    anthropic_client = None if args.no_judge else anthropic.Anthropic()
+    anthropic_client = anthropic.Anthropic()
 
     started = datetime.now()
     git = git_info()
@@ -483,6 +550,7 @@ def run_mode(args):
             "base_url": args.base_url,
             "git": git,
             "dup_threshold": args.dup_threshold,
+            "dup_method": DUP_METHOD,
             "judge_model": None if args.no_judge else JUDGE_MODEL,
             "cases": case_results,
             "summary": aggregate(case_results),
@@ -502,6 +570,50 @@ def run_mode(args):
     summary = save(case_results)
     print_summary(case_results, summary)
     print(f"\nWrote {path}")
+
+
+def short(text, n=100):
+    text = " ".join(str(text).split())
+    return text if len(text) <= n else text[: n - 3] + "..."
+
+
+def rescore_mode(args):
+    load_dotenv(ROOT / ".env")
+    in_path = Path(args.rescore)
+    data = json.loads(in_path.read_text())
+    bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+    anthropic_client = anthropic.Anthropic()
+
+    for case in data["cases"]:
+        questions = case["delivered_questions"]
+        print(f"[{case['id']}] rescoring {len(questions)} questions ...", flush=True)
+        candidates, pairs, error = detect_duplicates(bedrock, anthropic_client, questions, args.dup_threshold)
+        m = case["metrics"]
+        m["duplicate_candidates"] = candidates
+        m["duplicate_pairs"] = pairs
+        m["duplicate_rate"] = duplicate_rate(pairs, len(questions), error)
+        m["duplicate_error"] = error
+
+    data["summary"] = aggregate(data["cases"])
+    data["dup_threshold"] = args.dup_threshold
+    data["dup_method"] = DUP_METHOD
+    data["rescored_at"] = datetime.now().isoformat(timespec="seconds")
+    out_path = in_path.with_name(f"{in_path.stem}-rescored.json")
+    out_path.write_text(json.dumps(data, indent=2))
+
+    print_summary(data["cases"], data["summary"])
+    print("\nDuplicate candidates")
+    for case in data["cases"]:
+        m = case["metrics"]
+        questions = case["delivered_questions"]
+        print(f"[{case['id']}] {len(m['duplicate_candidates'])} candidate(s)"
+              + (f"  error: {m['duplicate_error']}" if m["duplicate_error"] else ""))
+        for c in m["duplicate_candidates"]:
+            verdict = {True: "DUPLICATE", False: "distinct", None: "no verdict"}[c["duplicate"]]
+            print(f"  q{c['i']} vs q{c['j']}  sim={c['similarity']:.3f}  {verdict}: {c['reason']}")
+            print(f"    q{c['i']}: {short(questions[c['i']].get('question_text'))}")
+            print(f"    q{c['j']}: {short(questions[c['j']].get('question_text'))}")
+    print(f"\nWrote {out_path}")
 
 
 def flatten(summary):
@@ -564,17 +676,20 @@ def main():
     p.add_argument("--base-url", default="http://localhost:8000")
     p.add_argument("--cases")
     p.add_argument("--case-timeout", type=float, default=900)
-    p.add_argument("--dup-threshold", type=float, default=0.90)
+    p.add_argument("--dup-threshold", type=float, default=0.75)
     p.add_argument("--no-judge", action="store_true")
     p.add_argument("--compare", nargs=2, metavar=("A_JSON", "B_JSON"))
+    p.add_argument("--rescore", metavar="IN_JSON")
     args = p.parse_args()
 
+    if sum(bool(x) for x in (args.label, args.compare, args.rescore)) != 1:
+        p.error("exactly one of --label, --compare or --rescore is required")
     if args.compare:
         compare_mode(*args.compare)
-    elif args.label:
-        run_mode(args)
+    elif args.rescore:
+        rescore_mode(args)
     else:
-        p.error("either --label or --compare is required")
+        run_mode(args)
 
 
 if __name__ == "__main__":
