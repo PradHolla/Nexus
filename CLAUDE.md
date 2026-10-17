@@ -12,7 +12,7 @@ Nexus: RAG quiz generator (FastAPI + SSE backend, Qdrant, React/Vite frontend). 
 
 - Python via `uv` (`uv sync`, `uv run ...`). Run API: `uv run uvicorn main:app --port 8000 --reload`. Qdrant: `docker compose up -d qdrant`. Runtime state (jobs/checkpoint DBs, caches, uploads) lives in `var/` (gitignored).
 - LLM: Claude Haiku 5.5 (`claude-haiku-5-5`) via the `anthropic` SDK; `ANTHROPIC_API_KEY` is in `.env`.
-- Embeddings: Titan v2 on Bedrock (staying). AWS credentials come from the user's AWS profile, not `.env`.
+- Embeddings: local `ibm-granite/granite-embedding-small-english-r2` via `fastembed` (384-dim, CPU, use `batch_size=8`). Replaces Titan; the app has no AWS dependency once the old pipeline is removed.
 - Never print or commit `.env` contents.
 
 ## Current focus

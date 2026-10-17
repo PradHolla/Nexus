@@ -6,7 +6,8 @@ Decided:
 - Ingestion becomes a LangGraph graph with a checkpointer.
 - Generate a summary per lecture at ingestion.
 - Keep only `lecture14-agents-shikhar-updated.pdf`.
-- Embeddings stay on Titan v2.
+- ~~Embeddings stay on Titan v2.~~ **Changed 2026-10-16:** local `ibm-granite/granite-embedding-small-english-r2` (fastembed, 384-dim, reads up to 8,192 tokens; our chunks max ~620 tokens). Removes AWS from the app.
+- **Changed 2026-10-16:** every kept page is transcribed by Haiku 5.5 vision (no OCR, no "<300 chars" rule). Build slides are collapsed first. Measured ~$0.03-0.05 per lecture. Implemented in `src/ingestion/{extract,vision,analyze,chunk}.py`, validated with `scripts/ingest_preview.py` on lectures 8, 10, 13.
 
 ## Verified facts this plan relies on (2026-10-15)
 
