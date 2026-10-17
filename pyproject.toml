@@ -27,11 +27,6 @@ dev = [
     "ipykernel>=7.4.0",
     "pytest>=9.1.1",
 ]
-eval = [
-    "datasets>=5.1.0",
-    "langchain-aws>=1.9.0",
-    "ragas>=0.4.3",
-]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
