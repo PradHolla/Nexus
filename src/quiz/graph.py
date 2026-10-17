@@ -9,6 +9,7 @@ eval harness consume). Subgraph events only reach the parent's astream with subg
 State holds plain JSON-able dicts only.
 """
 import asyncio
+import dataclasses
 import operator
 import os
 import random
@@ -19,7 +20,9 @@ import anthropic
 from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 from langgraph.types import Command, Send
+from qdrant_client import QdrantClient
 
 from src.llm import LLMError, generate_structured
 from src.quiz.outline import get_course_outline
@@ -339,8 +342,11 @@ class QuizState(TypedDict, total=False):
     usage: Annotated[list, operator.add]
 
 
-def _qdrant(config: RunnableConfig):
-    return config["configurable"]["qdrant"]
+@dataclasses.dataclass(frozen=True)
+class QuizContext:
+    """Run-scoped dependencies injected into nodes."""
+
+    qdrant: QdrantClient
 
 
 def _question_sends(state: QuizState, items: list[dict]) -> list[Send]:
@@ -363,12 +369,12 @@ def _fail(message: str) -> dict:
     return {"slots": [], "reserve": []}
 
 
-async def plan(state: QuizState, config: RunnableConfig) -> dict:
+async def plan(state: QuizState, runtime: Runtime[QuizContext]) -> dict:
     request = state["request"]
     _emit("planner_started", {})
 
     outline = await asyncio.to_thread(
-        get_course_outline, _qdrant(config), request["course_id"], request.get("file_filters")
+        get_course_outline, runtime.context.qdrant, request["course_id"], request.get("file_filters")
     )
     if not outline:
         suffix = " and file filters" if request.get("file_filters") else ""
@@ -428,13 +434,13 @@ def route_after_plan(state: QuizState) -> str:
     return "retrieve" if state.get("slots") else END
 
 
-async def retrieve(state: QuizState, config: RunnableConfig) -> dict:
+async def retrieve(state: QuizState, runtime: Runtime[QuizContext]) -> dict:
     request = state["request"]
     _emit("retrieval_started", {})
     items = state["slots"] + state["reserve"]  # main slots first, so they get first pick of chunks
     assigned = await asyncio.to_thread(
         assign_chunks,
-        _qdrant(config),
+        runtime.context.qdrant,
         request["course_id"],
         [Slot.model_validate(i["slot"]) for i in items],
         request.get("file_filters"),
@@ -561,7 +567,7 @@ async def finish(state: QuizState) -> dict:
 
 
 def build_quiz_graph():
-    builder = StateGraph(QuizState)
+    builder = StateGraph(QuizState, context_schema=QuizContext)
     builder.add_node("plan", plan, retry_policy=RETRY)
     builder.add_node("retrieve", retrieve, retry_policy=RETRY)
     builder.add_node("question", question)  # transient errors are retried per node inside the subgraph
@@ -584,14 +590,13 @@ async def stream_quiz(client, request: dict):
     config = {
         "max_concurrency": int(os.getenv("QUIZ_MAX_CONCURRENCY", "6")),
         "recursion_limit": 100,
-        "configurable": {"qdrant": client},
     }
     initial = {"request": request, "outline": [], "slots": [], "reserve": [], "results": [], "round": 0, "usage": []}
     try:
         # subgraphs=True is required for custom events written inside the question subgraph to reach this stream;
         # chunks then arrive as (namespace_tuple, payload).
         async for _namespace, chunk in QUIZ_GRAPH.astream(
-            initial, config, stream_mode="custom", subgraphs=True
+            initial, config, context=QuizContext(qdrant=client), stream_mode="custom", subgraphs=True
         ):
             yield chunk["event"], chunk["data"]
     except Exception as e:

@@ -4,6 +4,7 @@ import logging
 import os
 from pathlib import Path
 
+from src.ingestion.graph import IngestContext
 from src.job_status_store import append_job_log, list_unfinished_jobs, upsert_job_status
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,7 @@ class IngestionRunner:
         self._tasks: set[asyncio.Task] = set()
 
     def _config(self, job_id: str) -> dict:
-        # The qdrant client is not serializable; LangGraph keeps non-primitive configurable values out of the
-        # checkpoint metadata, so passing it through the run config is safe.
-        return {"configurable": {"thread_id": job_id, "qdrant": self.qdrant_client}}
+        return {"configurable": {"thread_id": job_id}}
 
     def _start(self, job_id: str, state: dict | None) -> None:
         task = asyncio.create_task(self._run(job_id, state))
@@ -38,7 +37,9 @@ class IngestionRunner:
         try:
             async with self._semaphore:
                 await asyncio.to_thread(upsert_job_status, job_id, "processing")
-                result = await self.graph.ainvoke(state, config=config, durability="sync")
+                result = await self.graph.ainvoke(
+                    state, config=config, context=IngestContext(qdrant=self.qdrant_client), durability="sync"
+                )
 
             await asyncio.to_thread(upsert_job_status, job_id, "completed")
             await asyncio.to_thread(append_job_log, job_id, f"Completed. Stats: {result.get('stats')}")

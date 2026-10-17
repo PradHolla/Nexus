@@ -15,9 +15,10 @@ from pathlib import Path
 from typing import Annotated, TypedDict
 
 import anthropic
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 from langgraph.types import Send
+from qdrant_client import QdrantClient
 
 from src.ingestion.analyze import analyze_document
 from src.ingestion.chunk import CHUNK_MAX_CHARS, check_chunks, chunk_document
@@ -64,6 +65,13 @@ class IngestState(TypedDict, total=False):
     analysis_usage: dict | None
     chunks: list[dict]
     stats: dict
+
+
+@dataclasses.dataclass(frozen=True)
+class IngestContext:
+    """Run-scoped dependencies injected into nodes (not checkpointed)."""
+
+    qdrant: QdrantClient
 
 
 def _vision_semaphore() -> asyncio.Semaphore:
@@ -177,7 +185,7 @@ async def chunk(state: IngestState) -> dict:
     return {"chunks": [c.model_dump() for c in chunks]}
 
 
-async def index(state: IngestState, config: RunnableConfig) -> dict:
+async def index(state: IngestState, runtime: Runtime[IngestContext]) -> dict:
     NODE_RUNS["index"] += 1
     # Test hook for crash-resume tests: if NEXUS_FAIL_INDEX_ONCE names an existing file, delete it and fail once.
     marker = os.getenv("NEXUS_FAIL_INDEX_ONCE")
@@ -185,7 +193,7 @@ async def index(state: IngestState, config: RunnableConfig) -> dict:
         os.remove(marker)
         raise RuntimeError("injected index failure")
 
-    client = config["configurable"]["qdrant"]
+    client = runtime.context.qdrant
     chunks = [Chunk.model_validate(c) for c in state["chunks"]]
 
     def write() -> dict:
@@ -235,7 +243,7 @@ async def finalize(state: IngestState) -> dict:
 
 
 def build_graph(checkpointer):
-    builder = StateGraph(IngestState)
+    builder = StateGraph(IngestState, context_schema=IngestContext)
     builder.add_node("extract", extract)
     builder.add_node("transcribe", transcribe, retry_policy=RETRY)
     builder.add_node("analyze", analyze, retry_policy=RETRY)
