@@ -32,7 +32,6 @@ RUN mkdir -p /tmp && chmod 777 /tmp
 EXPOSE 8000
 
 # Set environment variables (Placeholders - will be overridden by docker-compose/env)
-ENV AWS_REGION=us-east-1
 ENV QDRANT_HOST=qdrant
 ENV QDRANT_PORT=6333
 

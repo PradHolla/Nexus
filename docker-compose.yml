@@ -16,8 +16,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
-      - AWS_REGION=${AWS_REGION:-us-east-1}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - PYTHONUNBUFFERED=1
@@ -31,8 +29,6 @@ services:
     volumes:
       - ./var:/app/var
       # - /tmp:/tmp
-      # Mount your local AWS credentials as read-only
-      - ~/.aws:/root/.aws:ro
     depends_on:
       - qdrant
 

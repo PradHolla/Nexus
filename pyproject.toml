@@ -6,10 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "anthropic>=1.15.0",
-    "boto3>=1.43.114",
     "fastapi>=0.143.2",
     "fastembed>=0.9.0",
-    "flashrank>=0.2.10",
     "langgraph>=1.2.15",
     "langgraph-checkpoint-sqlite>=3.1.2",
     "pydantic>=2.14.1",
@@ -22,6 +20,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "boto3>=1.43.114",
     "httpx>=0.28.1",
     "ipykernel>=7.4.0",
     "pytest>=9.1.1",

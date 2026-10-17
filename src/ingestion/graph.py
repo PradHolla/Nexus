@@ -15,12 +15,9 @@ from pathlib import Path
 from typing import Annotated, TypedDict
 
 import anthropic
-import httpx
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy, Send
-from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
-from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
+from langgraph.types import Send
 
 from src.ingestion.analyze import analyze_document
 from src.ingestion.chunk import CHUNK_MAX_CHARS, check_chunks, chunk_document
@@ -37,6 +34,7 @@ from src.ingestion.schemas import (
 from src.ingestion.vision import build_page_content, transcribe_page
 from src.job_status_store import append_job_log
 from src.llm import LLMError
+from src.retry import RETRY, is_transient
 
 INPUT_USD_PER_MTOK = 0.10
 OUTPUT_USD_PER_MTOK = 0.50
@@ -66,24 +64,6 @@ class IngestState(TypedDict, total=False):
     analysis_usage: dict | None
     chunks: list[dict]
     stats: dict
-
-
-def is_transient(exc: BaseException) -> bool:
-    """True for network/overload failures worth retrying; False for bugs, bad requests and LLM output errors."""
-    if isinstance(exc, anthropic.APIConnectionError):  # includes APITimeoutError
-        return True
-    if isinstance(exc, anthropic.APIStatusError):  # 429, 5xx, overloaded, service unavailable, deadline exceeded
-        return exc.status_code == 429 or exc.status_code >= 500
-    if isinstance(exc, UnexpectedResponse):
-        return exc.status_code is not None and (exc.status_code == 429 or exc.status_code >= 500)
-    if isinstance(exc, ResourceExhaustedResponse):
-        return True
-    if isinstance(exc, ResponseHandlingException):  # qdrant wraps transport errors (and response parse errors)
-        return isinstance(exc.source, (httpx.TransportError, OSError))
-    return isinstance(exc, httpx.TransportError)
-
-
-RETRY = RetryPolicy(max_attempts=3, retry_on=is_transient)
 
 
 def _vision_semaphore() -> asyncio.Semaphore:

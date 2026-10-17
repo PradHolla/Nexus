@@ -7,9 +7,9 @@ import uuid
 import json
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 import asyncio
 from fastapi.responses import StreamingResponse
@@ -23,8 +23,8 @@ from src.job_status_store import (
     create_job,
     get_job_status_and_logs,
 )
-from src.retrieval.sampler import QuizSampler
-from src.quiz.generator import run_planner_agent, generate_validated_quiz
+from src.quiz.graph import stream_quiz
+from src.quiz.outline import list_course_files
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -34,7 +34,6 @@ from qdrant_client.http import models
 qdrant_host = os.getenv("QDRANT_HOST", "localhost")
 qdrant_port = os.getenv("QDRANT_PORT", "6333")
 qdrant_client = QdrantClient(f"http://{qdrant_host}:{qdrant_port}")
-sampler = QuizSampler(qdrant_client)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -107,7 +106,7 @@ async def get_ingest_job_status(job_id: str):
 
 @app.get("/api/courses/{course_id}/files")
 async def get_course_files(course_id: str):
-    files = sampler.get_course_files(course_id)
+    files = await asyncio.to_thread(list_course_files, qdrant_client, course_id)
     return {"files": files}
 
 @app.get("/api/courses/{course_id}/documents")
@@ -136,10 +135,12 @@ async def get_course_documents(course_id: str):
 
 class QuizRequest(BaseModel):
     course_id: str
-    num_questions: int = 5
-    user_prompt: str  
+    num_questions: int = Field(default=5, ge=1, le=20)
+    user_prompt: str
     keywords: Optional[List[str]] = None
-    file_filters: Optional[List[str]] = None 
+    file_filters: Optional[List[str]] = None
+    difficulty: Literal["easy", "medium", "hard", "mixed"] = "mixed"
+    # Accepted but unused since the quiz pipeline moved to LangGraph; kept so existing clients don't break.
     retrieval_mode: str = "hybrid"
     max_context_chunks: Optional[int] = None
     include_retrieval_diagnostics: bool = False
@@ -151,59 +152,11 @@ def _sse_event(event_type: str, data: dict) -> str:
 @app.post("/api/generate-quiz")
 async def create_quiz(request: QuizRequest):
     async def event_stream():
-        try:
-            yield _sse_event("planner_started", {})
-
-            # ==========================================
-            # STAGE 1: THE PLANNER
-            # ==========================================
-            for event in run_planner_agent(request.user_prompt, request.keywords):
-                if isinstance(event, str):
-                    yield event
-                else:
-                    plan = event
-            
-            yield _sse_event("log", {"message": f"Planner queries: {plan.vector_queries}"})
-            yield _sse_event("planner_complete", {"vector_queries": plan.vector_queries})
-
-            # ==========================================
-            # STAGE 2: RETRIEVAL
-            # ==========================================
-            yield _sse_event("retrieval_started", {})
-            for event in sampler.get_quiz_chunks(
-                course_id=request.course_id,
-                num_questions=request.num_questions,
-                file_filters=request.file_filters,
-                vector_queries=plan.vector_queries,
-                retrieval_mode=request.retrieval_mode,
-                max_context_chunks=request.max_context_chunks,
-                include_retrieval_diagnostics=request.include_retrieval_diagnostics,
-            ):
-                if isinstance(event, str):
-                    yield event
-                else:
-                    context_chunks = event
-
-            if not context_chunks:
-                yield _sse_event("error", {"message": "No course materials found for this request."})
-                return
-
-            yield _sse_event("retrieval_complete", {"chunk_count": len(context_chunks)})
-
-            # ==========================================
-            # STAGE 3: GENERATOR & CRITIC LOOP
-            # ==========================================
-            for event in generate_validated_quiz(
-                plan=plan,
-                chunks=context_chunks,
-                num_questions=request.num_questions,
-            ):
-                yield event
-                await asyncio.sleep(0)
-
-        except Exception as e:
-            yield _sse_event("log", {"message": f"API Error: {str(e)}"})
-            yield _sse_event("error", {"message": str(e)})
+        quiz_request = request.model_dump(
+            include={"course_id", "num_questions", "user_prompt", "keywords", "file_filters", "difficulty"}
+        )
+        async for name, data in stream_quiz(qdrant_client, quiz_request):
+            yield _sse_event(name, data)
 
     return StreamingResponse(
         event_stream(),
