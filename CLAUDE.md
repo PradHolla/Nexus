@@ -6,7 +6,9 @@ Nexus: RAG quiz generator (FastAPI + SSE backend, Qdrant, React/Vite frontend). 
 
 - **Don't assume — verify.** Before using any library API, model ID, SDK parameter, config field or CLI flag, confirm it against official docs, the installed package source (`.venv`), or the code in this repo. If you can't verify it, say so instead of guessing. Applies to plans as much as code.
 - **Delegate grunt coding to the `implementer` subagent** (`.claude/agents/implementer.md`, Sonnet 5.5, high effort). It does not read this file, so every delegation must be a self-contained spec: files to touch, exact behavior, interfaces/signatures, constraints, and how to verify. Review every diff it produces before accepting it; you own correctness.
-- **Tests: end-to-end only.** No mock-heavy or trivial unit tests. Tests exercise the real pipeline against real services (Qdrant, Bedrock Titan, Anthropic API) and assert on meaningful outcomes. Existing mock-based tests in `tests/` are legacy.
+- **Tests: end-to-end only.** No mock-heavy or trivial unit tests. Tests exercise the real pipeline against real services (Qdrant, the local embedding model, Anthropic API) and assert on meaningful outcomes.
+- **Use the harness file tools.** Read files with Read, change them with Edit, create them with Write. Never use `cat`/`sed`/`head` to read a file, or `sed -i`, heredocs or Python `str.replace` scripts to edit one: those can fail silently and hide the diff from the user. Bash is for running programs (`uv run`, `git`, `docker`, tests) and for searching (`grep`, `find`). Throwaway scripts go in the scratchpad, written with Write.
+- **Stick to the plan.** Do only what the user asked, in the agreed order. Mention anything else in one line and ask before doing it.
 
 ## Environment
 
