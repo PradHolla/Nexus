@@ -244,7 +244,7 @@ def build_graph(checkpointer):
     builder.add_node("finalize", finalize)
 
     builder.add_edge(START, "extract")
-    builder.add_conditional_edges("extract", fan_out)
+    builder.add_conditional_edges("extract", fan_out, ["transcribe", "analyze"])
     builder.add_edge("transcribe", "analyze")
     builder.add_edge("analyze", "chunk")
     builder.add_edge("chunk", "index")
