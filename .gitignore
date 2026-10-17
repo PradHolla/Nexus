@@ -34,9 +34,10 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# Claude Code
+# Claude Code and planning notes
 .claude/
 CLAUDE.md
+docs/plans/
 
 # Secrets
 .env
