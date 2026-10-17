@@ -30,7 +30,7 @@ export default function IngestionTab() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'], 'application/vnd.ms-powerpoint': ['.pptx'], 'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'], 'application/vnd.ms-powerpoint': ['.ppt'] }
+    accept: { 'application/pdf': ['.pdf'] }
   });
 
   const handleUpload = async () => {
@@ -155,7 +155,7 @@ export default function IngestionTab() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-500">Drag & drop PDF/PPT/PPTX files here, or click to select</p>
+            <p className="text-gray-500">Drag & drop PDF files here, or click to select</p>
           )}
         </div>
 

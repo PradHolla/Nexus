@@ -1,5 +1,6 @@
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Generator, Optional, Tuple
 
 from src.config import JOBS_DB_PATH
@@ -35,6 +36,35 @@ def init_db() -> None:
             conn.execute("ALTER TABLE JobStatus ADD COLUMN logs TEXT DEFAULT ''")
         except sqlite3.OperationalError:
             pass
+        for column in ("course_id", "file_name", "file_path", "created_at"):
+            try:
+                conn.execute(f"ALTER TABLE JobStatus ADD COLUMN {column} TEXT")
+            except sqlite3.OperationalError:
+                pass
+
+
+def create_job(job_id: str, course_id: str, file_name: str, file_path: str) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO JobStatus (job_id, status, logs, course_id, file_name, file_path, created_at)
+            VALUES (?, 'queued', '', ?, ?, ?, ?)
+            """,
+            (job_id, course_id, file_name, file_path, datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def list_unfinished_jobs() -> list[dict]:
+    with _get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT job_id, status, course_id, file_name, file_path, created_at
+            FROM JobStatus WHERE status IN ('queued', 'processing')
+            ORDER BY created_at
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
 
 
 def upsert_job_status(job_id: str, status: str) -> None:

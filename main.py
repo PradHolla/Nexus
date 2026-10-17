@@ -3,44 +3,31 @@ from dotenv import load_dotenv
 # Load .env before importing modules that create API clients at import time
 load_dotenv()
 
-import re
 import uuid
 import json
 import os
 from pathlib import Path
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import asyncio
-import concurrent.futures
 from fastapi.responses import StreamingResponse
-from src.config import UPLOADS_DIR, ensure_var_dirs
-from src.ingestion.embedder import process_and_ingest_document
-from src.ingestion.ppt_parser import parse_ppt
-from src.ingestion.pdf_parser import parse_pdf
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from src.config import CHECKPOINTS_DB_PATH, DOCUMENTS_COLLECTION, UPLOADS_DIR, ensure_var_dirs
+from src.ingestion.graph import build_graph
+from src.ingestion.index import ensure_collections
+from src.ingestion.runner import IngestionRunner
 from src.job_status_store import (
     init_db,
-    upsert_job_status,
-    append_job_log,
+    create_job,
     get_job_status_and_logs,
-    get_job_status as get_stored_job_status,
 )
 from src.retrieval.sampler import QuizSampler
 from src.quiz.generator import run_planner_agent, generate_validated_quiz
 from fastapi.middleware.cors import CORSMiddleware
 from qdrant_client import QdrantClient
-
-
-def _get_env_int(name: str, default: int, minimum: int = 1) -> int:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return max(minimum, default)
-
-    try:
-        return max(minimum, int(raw_value))
-    except ValueError:
-        return max(minimum, default)
+from qdrant_client.http import models
 
 
 # Pull from env so Docker can route to the 'qdrant' container, fallback to localhost for uv runs
@@ -49,20 +36,24 @@ qdrant_port = os.getenv("QDRANT_PORT", "6333")
 qdrant_client = QdrantClient(f"http://{qdrant_host}:{qdrant_port}")
 sampler = QuizSampler(qdrant_client)
 
-# --- GLOBAL EXECUTOR ---
-# Reusing the process pool is more efficient than creating one per request,
-# but the default worker count is too aggressive for local Docker memory.
-parse_worker_count = _get_env_int("INGEST_PARSE_WORKERS", 2)
-process_pool = concurrent.futures.ProcessPoolExecutor(max_workers=parse_worker_count)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     ensure_var_dirs()
     init_db()
+    await asyncio.to_thread(ensure_collections, qdrant_client)
     print("Starting Nexus Backend...")
-    yield
-    print("Shutting down...")
-    process_pool.shutdown()
+    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINTS_DB_PATH)) as checkpointer:
+        graph = build_graph(checkpointer)
+        app.state.runner = IngestionRunner(graph, qdrant_client)
+        recovered = await app.state.runner.recover()
+        if recovered:
+            print(f"Recovered unfinished ingestion jobs: {recovered}")
+        try:
+            yield
+        finally:
+            print("Shutting down...")
+            # Stop running jobs before the checkpointer connection closes; they resume on the next start.
+            await app.state.runner.shutdown()
 
 app = FastAPI(title="Nexus API", lifespan=lifespan)
 
@@ -78,116 +69,28 @@ app.add_middleware(
 )
 
 # --- INGESTION ENDPOINTS ---
-def _cpu_bound_parse(file_path: str, filename: str, course_id: str, job_id: str = None) -> list:
-    match = re.search(r'\d+', filename)
-    actual_lecture_num = int(match.group()) if match else 0
-
-    if filename.lower().endswith(('.pptx', '.ppt')):
-        return parse_ppt(file_path, filename, course_id, lecture_number=actual_lecture_num, job_id=job_id)
-    else:
-        return parse_pdf(file_path, filename, course_id, lecture_number=actual_lecture_num, job_id=job_id)
-
-async def batch_ingest_task(jobs: list):
-    loop = asyncio.get_running_loop()
-    parse_concurrency = min(parse_worker_count, max(1, len(jobs)))
-
-    for job in jobs:
-        upsert_job_status(job["job_id"], "processing")
-        append_job_log(
-            job["job_id"],
-            f"Starting CPU parsing for {len(jobs)} files with up to {parse_concurrency} worker processes.",
-        )
-
-    tasks = [
-        loop.run_in_executor(
-            process_pool, 
-            _cpu_bound_parse, 
-            job["file_path"], 
-            job["filename"], 
-            job["course_id"],
-            job["job_id"]
-        )
-        for job in jobs
-    ]
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    all_academic_chunks = []
-
-    for i, result in enumerate(results):
-        job_id = jobs[i]["job_id"]
-        if isinstance(result, Exception):
-            upsert_job_status(job_id, f"failed: {str(result)}")
-            append_job_log(job_id, f"Job failed during parsing: {result}")
-        else:
-            academic_chunks = [c for c in result if not c.get("is_administrative")]
-            all_academic_chunks.extend(academic_chunks)
-            append_job_log(job_id, f"Successfully parsed {len(result)} chunks from {jobs[i]['filename']}.")
-
-    if all_academic_chunks:
-        log_msg = f"Sending {len(all_academic_chunks)} total chunks to the Bedrock Embedder..."
-        for job in jobs:
-            append_job_log(job["job_id"], log_msg)
-            
-        try:
-            # Note: Embedder internal logs will need Job ID support too
-            process_and_ingest_document(all_academic_chunks, qdrant_client, jobs=[j["job_id"] for j in jobs])
-        except Exception as e:
-            for job in jobs:
-                if get_stored_job_status(job["job_id"]) == "processing":
-                    upsert_job_status(job["job_id"], "failed: ingestion error")
-                    append_job_log(job["job_id"], f"Embedding/Ingestion failed: {e}")
-
-    # Finalize statuses and CLEANUP
-    for i, result in enumerate(results):
-        job_id = jobs[i]["job_id"]
-        file_path = jobs[i]["file_path"]
-        
-        if not isinstance(result, Exception) and get_stored_job_status(job_id) == "processing":
-            upsert_job_status(job_id, "completed")
-            append_job_log(job_id, "Batch ingestion finished successfully.")
-        
-        # --- CLEANUP: Remove temp file ---
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                append_job_log(job_id, f"Cleaned up temp file: {file_path}")
-            except Exception as e:
-                append_job_log(job_id, f"Failed to delete temp file {file_path}: {e}")
-
-
 @app.post("/api/ingest")
 async def ingest_documents(
-    background_tasks: BackgroundTasks,
     course_id: str,
     files: List[UploadFile] = File(...)
 ):
-    jobs_data = []
+    if any(not file.filename.lower().endswith(".pdf") for file in files):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
     job_ids = []
-    
     for file in files:
-        if not file.filename.lower().endswith(('.pdf', '.pptx', '.ppt')):
-            raise HTTPException(status_code=400, detail="Unsupported file type")
-            
         job_id = str(uuid.uuid4())
-        temp_file_path = str(UPLOADS_DIR / f"{job_id}_{Path(file.filename).name}")
-        
+        file_name = Path(file.filename).name
+        temp_file_path = str(UPLOADS_DIR / f"{job_id}_{file_name}")
+
+        content = await file.read()
         with open(temp_file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
-            
-        upsert_job_status(job_id, "queued")
-        
-        jobs_data.append({
-            "job_id": job_id,
-            "file_path": temp_file_path,
-            "filename": file.filename,
-            "course_id": course_id
-        })
+
+        create_job(job_id, course_id, file_name, temp_file_path)
+        app.state.runner.submit(job_id, course_id, file_name, temp_file_path)
         job_ids.append({"filename": file.filename, "job_id": job_id})
-        
-    background_tasks.add_task(batch_ingest_task, jobs_data)
-        
+
     return {"message": "Ingestion started", "jobs": job_ids}
 
 @app.get("/api/jobs/{job_id}")
@@ -206,6 +109,30 @@ async def get_ingest_job_status(job_id: str):
 async def get_course_files(course_id: str):
     files = sampler.get_course_files(course_id)
     return {"files": files}
+
+@app.get("/api/courses/{course_id}/documents")
+async def get_course_documents(course_id: str):
+    def scroll_all() -> list[dict]:
+        documents = []
+        offset = None
+        while True:
+            records, offset = qdrant_client.scroll(
+                collection_name=DOCUMENTS_COLLECTION,
+                scroll_filter=models.Filter(
+                    must=[models.FieldCondition(key="course_id", match=models.MatchValue(value=course_id))]
+                ),
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            documents.extend(r.payload for r in records)
+            if offset is None:
+                return documents
+
+    documents = await asyncio.to_thread(scroll_all)
+    documents.sort(key=lambda d: (d.get("lecture_number") is None, d.get("lecture_number") or 0, d["file_name"]))
+    return {"documents": documents}
 
 class QuizRequest(BaseModel):
     course_id: str

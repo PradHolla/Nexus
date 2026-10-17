@@ -8,7 +8,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from flashrank import Ranker, RerankRequest
 
-from src.ingestion.embedder import get_titan_embedding
+from src.embeddings import embed_query
 from src.vector_store import (
     DEFAULT_COLLECTION_NAME,
     HYBRID_PREFETCH_LIMIT,
@@ -162,7 +162,7 @@ class QuizSampler:
         
         must_conditions = [
             models.FieldCondition(key="course_id", match=models.MatchValue(value=course_id)),
-            models.FieldCondition(key="is_administrative", match=models.MatchValue(value=False))
+            models.FieldCondition(key="quiz_eligible", match=models.MatchValue(value=True))
         ]
 
         if file_filters:
@@ -211,7 +211,7 @@ class QuizSampler:
                 )
 
             for query in vector_queries:
-                query_vector = get_titan_embedding(query)
+                query_vector = embed_query(query)
                 if not query_vector:
                     continue
 
