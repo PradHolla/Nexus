@@ -40,6 +40,8 @@ Tests are end-to-end only. They run against real Qdrant (in separate test collec
 uv run pytest tests/e2e -v
 ```
 
+**Tracing (optional).** Add `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY=...` to `.env`. Every quiz and ingestion run then appears in [LangSmith](https://smith.langchain.com) under the `nexus` project (override it with `LANGSMITH_PROJECT`), showing each graph node, its timing, and every Claude call with its prompt, output and token counts. This works both locally and in Docker.
+
 ## Architecture
 
 ```

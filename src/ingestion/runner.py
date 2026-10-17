@@ -33,7 +33,7 @@ class IngestionRunner:
         self._start(job_id, None)
 
     async def _run(self, job_id: str, state: dict | None) -> None:
-        config = self._config(job_id)
+        config = {**self._config(job_id), "run_name": "ingest"}  # run_name: LangSmith trace name
         try:
             async with self._semaphore:
                 await asyncio.to_thread(upsert_job_status, job_id, "processing")

@@ -3,9 +3,13 @@ from dotenv import load_dotenv
 # Load .env before importing modules that create API clients at import time
 load_dotenv()
 
+import os
+
+# LangSmith traces (enabled by LANGSMITH_TRACING=true) go to this project; it's created on the first trace.
+os.environ.setdefault("LANGSMITH_PROJECT", "nexus")
+
 import uuid
 import json
-import os
 from pathlib import Path
 from typing import List, Literal, Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException

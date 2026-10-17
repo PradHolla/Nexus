@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
 import anthropic
+from langsmith.wrappers import wrap_anthropic
 from pydantic import BaseModel, ValidationError
 
 from src.config import LLM_MODEL
@@ -48,11 +49,12 @@ class StructuredResult(Generic[T]):
 
 
 def get_client() -> anthropic.AsyncAnthropic:
-    """Return an AsyncAnthropic client cached per running event loop (must be called inside a loop)."""
+    """Return an AsyncAnthropic client cached per running event loop (must be called inside a loop).
+    Wrapped for LangSmith: calls show up as LLM runs inside the graph trace when LANGSMITH_TRACING=true."""
     loop = asyncio.get_running_loop()
     client = _clients.get(loop)
     if client is None:
-        client = anthropic.AsyncAnthropic()
+        client = wrap_anthropic(anthropic.AsyncAnthropic())
         _clients[loop] = client
     return client
 

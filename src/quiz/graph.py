@@ -590,6 +590,7 @@ async def stream_quiz(client, request: dict):
     config = {
         "max_concurrency": int(os.getenv("QUIZ_MAX_CONCURRENCY", "6")),
         "recursion_limit": 100,
+        "run_name": "quiz",  # LangSmith trace name
     }
     initial = {"request": request, "outline": [], "slots": [], "reserve": [], "results": [], "round": 0, "usage": []}
     try:
