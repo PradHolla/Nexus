@@ -5,11 +5,35 @@ import AgentLogPanel from './AgentLogPanel'; // <-- NEW IMPORT
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
+const DIFFICULTY_STYLES = {
+  easy: 'bg-green-100 text-green-800',
+  medium: 'bg-amber-100 text-amber-800',
+  hard: 'bg-red-100 text-red-800',
+};
+
+// Build readable, de-duplicated source chips from a question's `sources`.
+const uniqueSources = (sources) => {
+  const seen = new Set();
+  const out = [];
+  for (const s of sources || []) {
+    const name = s.lecture_number != null ? `Lecture ${s.lecture_number}` : s.file_name;
+    const pages = s.page_start === s.page_end
+      ? `p. ${s.page_start}`
+      : `pp. ${s.page_start}–${s.page_end}`;
+    const label = `${name} · ${pages}`;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    out.push({ label, file_name: s.file_name });
+  }
+  return out;
+};
+
 export default function QuizTab() {
   const [params, setParams] = useState({
     course_id: 'CS224',
     num_questions: 5,
-    user_prompt: 'Generate a highly difficult, conceptual quiz focusing on LSTMs and Attention Mechanisms. Strictly ignore course administration, textbook names, and grading policies.',
+    difficulty: 'mixed',
+    user_prompt: 'A quiz on LSTMs and attention mechanisms.',
     keywords: '',
     file_filters: []
   });
@@ -20,7 +44,8 @@ export default function QuizTab() {
   const [error, setError] = useState('');
   const [expandedQs, setExpandedQs] = useState({});
   const [streamStatus, setStreamStatus] = useState('');
-  
+  const [completeSummary, setCompleteSummary] = useState('');
+
   // <-- NEW STATE FOR THE TERMINAL -->
   const [logs, setLogs] = useState([]);
 
@@ -57,6 +82,7 @@ export default function QuizTab() {
     setQuiz({ questions: [], quarantined_questions: [] });
     setExpandedQs({});
     setStreamStatus('Initializing...');
+    setCompleteSummary('');
     setLogs([]); // <-- Clear terminal on new run
 
     const processedKeywords = params.keywords
@@ -112,7 +138,14 @@ export default function QuizTab() {
             questions: event.data?.questions || [],
             quarantined_questions: event.data?.quarantined_questions || [],
           });
-          setStreamStatus('Generation complete.');
+          {
+            const cost = event.data?.usage?.cost_usd;
+            const summary = typeof cost === 'number'
+              ? `Generation complete · $${cost.toFixed(4)}`
+              : 'Generation complete.';
+            setStreamStatus(summary);
+            setCompleteSummary(summary);
+          }
           break;
         case 'error':
           setError(event.data?.message || 'Streaming failed');
@@ -206,12 +239,26 @@ export default function QuizTab() {
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Number of Questions ({params.num_questions})</label>
-            <input 
-              type="range" min="1" max="10" 
-              value={params.num_questions} 
-              onChange={e => setParams({...params, num_questions: parseInt(e.target.value)})} 
-              className="w-full" 
+            <input
+              type="range" min="1" max="10"
+              value={params.num_questions}
+              onChange={e => setParams({...params, num_questions: parseInt(e.target.value)})}
+              className="w-full"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Difficulty</label>
+            <select
+              value={params.difficulty}
+              onChange={e => setParams({...params, difficulty: e.target.value})}
+              className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+            >
+              <option value="mixed">Mixed</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
           </div>
 
           {/* The Agentic Prompt Area */}
@@ -253,6 +300,10 @@ export default function QuizTab() {
           </div>
         )}
 
+        {!loading && completeSummary && (
+          <p className="text-sm text-gray-600">{completeSummary}</p>
+        )}
+
         {quiz && quiz.questions && quiz.questions.length > 0 && (
           <div className="flex gap-2 mb-4">
             <button
@@ -273,6 +324,20 @@ export default function QuizTab() {
         {quiz && quiz.questions.map((q, idx) => (
           <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6">
+              {(q.topic || q.difficulty) && (
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  {q.topic && (
+                    <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {q.topic}
+                    </span>
+                  )}
+                  {q.difficulty && (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${DIFFICULTY_STYLES[q.difficulty] || 'bg-gray-100 text-gray-700'}`}>
+                      {q.difficulty}
+                    </span>
+                  )}
+                </div>
+              )}
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 <span className="text-blue-600 font-bold mr-2">Q{idx + 1}.</span> 
                 {q.question_text}
@@ -298,10 +363,6 @@ export default function QuizTab() {
                 {expandedQs[idx] && (
                   <div className="mt-4 p-4 bg-blue-50/50 rounded-lg border border-blue-100 space-y-4">
                     <div>
-                      <span className="font-semibold text-gray-800 text-sm">Reasoning Scratchpad (Chain of Thought):</span>
-                      <p className="text-gray-600 italic text-sm mt-1">"{q.reasoning_scratchpad}"</p>
-                    </div>
-                    <div>
                       <span className="font-semibold text-gray-800 text-sm">Correct Answer:</span>
                       <p className="text-green-700 font-medium text-sm mt-1">{q.correct_answer}</p>
                     </div>
@@ -312,11 +373,11 @@ export default function QuizTab() {
                     <div className="flex flex-wrap items-center mt-3 pt-3 border-t border-blue-100 gap-2">
                       <div className="flex items-center w-full mb-1">
                         <BookOpen className="w-4 h-4 text-blue-500 mr-2" />
-                        <span className="font-semibold text-gray-800 text-sm">Source Chunks:</span>
+                        <span className="font-semibold text-gray-800 text-sm">Sources:</span>
                       </div>
-                      {q.source_chunk_ids && q.source_chunk_ids.map((id, i) => (
-                        <span key={i} className="text-xs font-mono text-blue-800 bg-blue-100 px-2 py-1 rounded">
-                          {id}
+                      {uniqueSources(q.sources).map(s => (
+                        <span key={s.label} title={s.file_name} className="text-xs text-blue-800 bg-blue-100 px-2 py-1 rounded">
+                          {s.label}
                         </span>
                       ))}
                     </div>
@@ -333,6 +394,7 @@ export default function QuizTab() {
             <div className="space-y-3">
               {quiz.quarantined_questions.map((q, idx) => (
                 <div key={idx} className="bg-white border border-amber-200 rounded-lg p-3">
+                  {q.topic && <p className="text-xs text-amber-700 mb-1">Topic: {q.topic}</p>}
                   <p className="text-sm text-amber-900 font-medium">{q.drafted_question}</p>
                   <p className="text-xs text-amber-700 mt-1">Reason: {q.rejection_reason}</p>
                 </div>
