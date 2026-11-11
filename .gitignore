@@ -38,6 +38,7 @@ lerna-debug.log*
 .claude/
 CLAUDE.md
 docs/plans/
+docs/notes/
 
 # Secrets
 .env
